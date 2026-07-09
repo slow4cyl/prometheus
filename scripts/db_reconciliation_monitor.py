@@ -165,6 +165,7 @@ def main():
     covered_synthesis_outputs = []
     benign_collisions = []  # result landed under exp_id; task-id backlink lost to dedup
     design_children = []  # decompose "Design ..." planning children — produce a spec, not a result
+    writer_utility_tasks = []  # "Write experiment result ..." tasks — result lands under the target experiment
     for t in k.execute(
             "SELECT id, title, assignee, completed_at FROM tasks "
             "WHERE status IN ('done','archived') AND created_at > ? "
@@ -198,6 +199,14 @@ def main():
                 "AND payload LIKE '%from_decompose_of%' LIMIT 1", (t["id"],)).fetchone():
             design_children.append(t["id"])
             continue
+        # Writer-utility task: its whole job is invoking write_worker_result.py
+        # for a DIFFERENT experiment (title "Write experiment result ...");
+        # the result correctly lands under that experiment's id, so this task
+        # having no worker_result of its own is by construction (first seen:
+        # t_ab15f9c2, whose write landed under exp_1782685474000007426).
+        if (t["title"] or "").lower().startswith("write experiment result"):
+            writer_utility_tasks.append(t["id"])
+            continue
         has_summary = k.execute(
             "SELECT 1 FROM task_runs WHERE task_id=? AND outcome='completed' "
             "AND summary IS NOT NULL AND TRIM(summary)!='' LIMIT 1", (t["id"],)).fetchone()
@@ -207,6 +216,7 @@ def main():
     info["covered_synthesis_outputs"] = covered_synthesis_outputs
     info["benign_experiment_id_collisions"] = benign_collisions
     info["design_decomposition_children"] = design_children
+    info["writer_utility_tasks"] = writer_utility_tasks
     if missing:
         alerts.append(f"missing_kanban_results: {len(missing)} completed experiment tasks "
                       f"with summaries never reached prometheus (e.g. {missing[:3]})")
