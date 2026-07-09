@@ -73,3 +73,37 @@ def test_calibrate_confidence_interpolates_and_clamps_edges():
 def test_calibration_never_reports_certainty():
     for raw in (0.0, 0.35, 0.6, 0.85, 1.0):
         assert 0.0 < calibrate_confidence(raw) < 1.0
+
+
+# --- world gate (2026-07-09): gate, not weight; arm-file controlled ---------
+
+def _establishable(**over):
+    kw = dict(wsc=9.0, refute_count=0, contradiction_count=0, n_retests=3,
+              n_formal_replications=1, spurious_agreement=0.0, n_break_survivals=1,
+              n_blind_supports=1, n_stamped_supports=2, independence_armed=True)
+    kw.update(over)
+    return maturity.compute_maturity(**kw)
+
+
+def test_world_gate_blocks_established_when_armed_and_world_refuted():
+    r = _establishable(world_refuted=1, world_gate_armed=True)
+    assert r.status == "REPLICATED"
+    assert "world" in (r.blocking_reason or "").lower()
+
+
+def test_world_gate_inert_when_disarmed():
+    # Disarmed path must be byte-identical to pre-gate: a world FAILS does not block.
+    assert _establishable(world_refuted=1, world_gate_armed=False).status == "ESTABLISHED"
+
+
+def test_world_gate_does_not_block_when_world_holds():
+    assert _establishable(world_refuted=0, world_gate_armed=True).status == "ESTABLISHED"
+
+
+def test_world_gate_never_demotes_below_replicated():
+    # A CANDIDATE-level claim with a world FAILS stays CANDIDATE — the gate only
+    # caps the REPLICATED->ESTABLISHED promotion, never demotes further.
+    r = maturity.compute_maturity(wsc=0.6, refute_count=0, contradiction_count=0,
+                                  n_retests=0, n_formal_replications=0, spurious_agreement=0.0,
+                                  world_refuted=1, world_gate_armed=True)
+    assert r.status not in ("ESTABLISHED", "REPLICATED")

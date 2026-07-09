@@ -2,6 +2,8 @@
 
 **An autonomous research system that runs 24/7 on one workstation — and is built to distrust itself.**
 
+[![tests](https://github.com/slow4cyl/prometheus/actions/workflows/tests.yml/badge.svg)](https://github.com/slow4cyl/prometheus/actions/workflows/tests.yml)
+
 > **No relation to [Prometheus monitoring](https://prometheus.io)** — this project shares only the name.
 
 Prometheus turns a single Linux box with one GPU into a self-directing research fleet: it generates its own questions, dispatches LLM workers to run real experiments with preserved code, extracts claims with scoped confidence, and then spends a large fraction of its compute **attacking its own conclusions** — adversarial replication, cross-domain disconfirmation, novelty verification against the actual literature indexes, and calibration audits that measure how often the system's own confidence is wrong.

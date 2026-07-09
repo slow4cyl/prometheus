@@ -8,6 +8,27 @@ fixed, which is why the rest of its list is taken seriously.)
 
 ## Done
 
+- **Independence gate given teeth** — the armed-but-toothless gate now applies
+  134 haircuts (was 0) and demoted exactly 4 over-trusted ESTABLISHED claims.
+  Root cause: the durable prior_fed stamp postdated the shelf; the "unknown-body"
+  premise was stale. `backfill_prior_feed_stamps.py` stamped 135,688 pre-stamp
+  tasks (body-derived, reversible via `--rollback`), and
+  `independence_gate.sweep_missing_stamps()` on the existing --check cron heals
+  the ~24%/day enqueuer leak going forward. Verified: 4 demotions matched the
+  simulation exactly (claims 66659/66878/69850/70091).
+- **World gate armed** — `maturity.py` toy-vs-world gate: a claim whose latest
+  verified world-grounding is FAILS cannot reach ESTABLISHED. Landed disarmed
+  (proven byte-identical), then armed via `~/.hermes/world_gate_armed.json`
+  (0 apply-day tier changes; binds prophylactically). Gate not weight; reversible
+  by removing the arm file. 4 tests pin it.
+- **CI** — `.github/workflows/tests.yml` runs the suite on every push (verified
+  green in a clean minimal venv: pytest + PyYAML + numpy).
+- **Config-drift + PR-watch sentinels** — on cron; the config sentinel guards
+  the model-clobber class from this week's incident.
+- **torn-extend WAL fix** — the obvious ≤1-page tolerance was adversarially
+  disproven (see TORN_EXTEND_NOTES.md); deferred to a dedicated pass with the
+  robust re-stat-and-persist form. NOT shipped, NOT submitted.
+
 - **Domain normalization single-source** — `apply_worker_results` delegates
   to `write_worker_result.normalize_domain`; regression-pinned by
   `tests/test_domain_normalization.py` (the banned lossy mappings can't

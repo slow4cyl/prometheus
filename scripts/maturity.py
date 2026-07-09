@@ -48,6 +48,10 @@ MATURITY_THRESHOLDS = {
     # ordinary replication that re-derives the same construction replicates
     # the flaw; survival of a genuine attack is the bar for the top tier.
     "established_break_survivals": 1,
+    # 2026-07-09: world gate (gate, not weight). A claim whose latest verified
+    # world-grounding outcome is FAILS cannot reach ESTABLISHED (0 = any such
+    # FAILS blocks). Binds only when ~/.hermes/world_gate_armed.json is armed.
+    "established_world_fails_max": 0,
     # 2026-07-04: independence gate (gate, not weight). ESTABLISHED requires
     # >= 1 BLIND support — one whose task was durably stamped prior_fed=0
     # (task_prior_feed), i.e. the worker was NOT handed the RAG "CONFIRMED
@@ -55,8 +59,12 @@ MATURITY_THRESHOLDS = {
     # conclusion is not independent confirmation. Applies ONLY when (a) the
     # stamp has self-armed (independence_gate.py --check proves stamp
     # accuracy; independence_armed.json) and (b) the claim has >= 2 STAMPED
-    # supports (it lives in the stamp era — pre-stamp claims are exempt, we
-    # cannot retroactively know). Active settlement paths: the retest lane
+    # supports. NOTE (2026-07-09): the "pre-stamp claims are exempt — we cannot
+    # retroactively know" rationale is OBSOLETE — kanban retains task bodies, so
+    # prior_fed is recoverable from the body (FEED_MARK) at 99.99% agreement with
+    # creation stamps; backfill_prior_feed_stamps.py stamped the pre-stamp shelf
+    # and independence_gate.sweep_missing_stamps keeps it covered, so the gate now
+    # binds shelf-wide, not just stamp-era. Active settlement paths: the retest lane
     # (blind since suppress_prior_context) and the clean-room lane both
     # produce stamped-blind supports — no one-way door.
     "established_blind_supports": 1,
@@ -99,6 +107,8 @@ def compute_maturity(
     n_blind_supports: int = 0,
     n_stamped_supports: int = 0,
     independence_armed: bool = False,
+    world_refuted: int = 0,
+    world_gate_armed: bool = False,
 ) -> MaturityResult:
     """Compute claim maturity from provenance signals. No DB side effects.
 
@@ -221,6 +231,13 @@ def compute_maturity(
                           and n_stamped_supports >= t.get("blind_gate_min_stamped", 2))
     blind_ok = (not blind_gate_applies
                 or n_blind_supports >= t.get("established_blind_supports", 1))
+    # World gate (2026-07-09): a claim whose LATEST verified world-grounding
+    # outcome is FAILS cannot reach ESTABLISHED until re-grounded. Gate, not
+    # weight — caps the tier, never mutates wsc/posterior/refute_count (the
+    # FAILS already flows as an ordinary refute through intake). Binds only
+    # when armed (~/.hermes/world_gate_armed.json); inert otherwise, so the
+    # disarmed code path is byte-identical to pre-gate behavior.
+    world_ok = (not world_gate_armed) or (not world_refuted)
 
     est_passed = list(passed)
     est_failed = list(failed)
@@ -254,8 +271,12 @@ def compute_maturity(
                               f"(all {n_stamped_supports} stamped supports were prior-fed — "
                               f"needs one blind confirmation; retest/clean-room lanes supply)")
 
+    if world_gate_armed and world_refuted:
+        est_failed.append("latest verified world-grounding is FAILS "
+                          "(blocked from ESTABLISHED until re-grounded — world gate)")
+
     can_establish = (wsc_est_ok and refute_ok and contra_ok
-                     and formal_rep_ok and sa_ok and break_ok and blind_ok)
+                     and formal_rep_ok and sa_ok and break_ok and blind_ok and world_ok)
 
     # --- Determine status (highest tier that passes all checks) ---
     if can_establish:
@@ -279,6 +300,8 @@ def compute_maturity(
             blockers.append(f"needs {t.get('established_break_survivals', 0)} adversarial-replication survival(s)")
         if not blind_ok:
             blockers.append("needs 1 blind (non-prior-fed) support")
+        if not world_ok:
+            blockers.append("blocked by verified world-grounding FAILS — needs re-grounding")
         blocking = "; ".join(blockers) if blockers else None
         return MaturityResult(
             status="REPLICATED",
@@ -477,6 +500,16 @@ def recompute_all_maturity(conn, dry_run=False, verbose=False):
                 n_fed INTEGER DEFAULT 0,
                 fed_hashes TEXT,
                 created_at REAL NOT NULL)""")
+        # world_groundings normally created by world_grounding.ensure_ledger;
+        # ensured here so the world-gate subselect never crashes a fresh DB.
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS world_groundings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                claim_id INTEGER NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                outcome TEXT,
+                verified INTEGER,
+                resolved_at REAL)""")
         conn.commit()
     except Exception:
         pass
@@ -490,6 +523,17 @@ def recompute_all_maturity(conn, dry_run=False, verbose=False):
         import json as _json
         with open(os.path.expanduser("~/.hermes/independence_armed.json")) as _f:
             independence_armed = bool(_json.load(_f).get("armed"))
+    except Exception:
+        pass
+
+    # World gate arming: read once per pass (2026-07-09). Binds only after an
+    # operator arms it (measure-before-gating: >= ~20 verified world outcomes).
+    # Disarmed → world_refuted never blocks, byte-identical to pre-gate.
+    world_gate_armed = False
+    try:
+        import json as _json
+        with open(os.path.expanduser("~/.hermes/world_gate_armed.json")) as _f:
+            world_gate_armed = bool(_json.load(_f).get("armed"))
     except Exception:
         pass
 
@@ -524,7 +568,13 @@ def recompute_all_maturity(conn, dry_run=False, verbose=False):
                            AND wr.hypothesis_supported = 1
                            AND COALESCE(ce.evidence_type, 'support') != 'retracted_by_arbitration'
                            AND tpf.prior_fed = 0
-                        ), 0) as n_blind_supports
+                        ), 0) as n_blind_supports,
+               CASE WHEN COALESCE((SELECT wg.outcome FROM world_groundings wg
+                         WHERE wg.claim_id = knowledge_claims.id
+                           AND wg.status = 'resolved' AND wg.verified = 1
+                           AND wg.outcome IN ('HOLDS', 'FAILS')
+                         ORDER BY wg.resolved_at DESC LIMIT 1), '') = 'FAILS'
+                    THEN 1 ELSE 0 END as world_refuted
         FROM knowledge_claims
         WHERE claim_status IS NULL
            OR claim_status NOT IN ('WELL_KNOWN', 'KNOWN', 'NOVEL', 'PARTIAL')
@@ -563,6 +613,8 @@ def recompute_all_maturity(conn, dry_run=False, verbose=False):
             n_blind_supports=row["n_blind_supports"],
             n_stamped_supports=row["n_stamped_supports"],
             independence_armed=independence_armed,
+            world_refuted=row["world_refuted"],
+            world_gate_armed=world_gate_armed,
         )
 
         new_status = result.status

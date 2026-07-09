@@ -546,6 +546,63 @@ def _set_model_override(task_id, model):
         return False
 
 
+def sweep_missing_stamps(settle_seconds=900, cap=25000):
+    """Stamp any settled, bodied t_ task that still has no task_prior_feed row.
+
+    The teeth-keeper: only ~4 enqueuers call prior_feed_stamp.record() at
+    creation, but a dozen+ (synthesis, break-lane, transfer, compression-
+    boundary, detector retests) INSERT INTO tasks directly, leaking ~24%/day
+    of new tasks unstamped. Without this, coverage decays after the one-shot
+    backfill. Rides the existing --check cron; prior_fed is body-derived with
+    the SAME rule as prior_feed_stamp.record (single source of truth), INSERT
+    OR IGNORE so a real creation stamp is never overwritten. Best-effort:
+    never raises into the gate.
+    """
+    import time as _t
+    try:
+        from prior_feed_stamp import FEED_MARK as _FM, _fed_hashes as _fh, DB as _PDB
+        import json as _j
+        pk = os.path.expanduser("~/.hermes/kanban.db")
+        pc = sqlite3.connect(f"file:{_PDB}?mode=ro", uri=True)
+        have = {r[0] for r in pc.execute("SELECT kanban_task_id FROM task_prior_feed")}
+        pc.close()
+        kc = sqlite3.connect(f"file:{pk}?mode=ro", uri=True)
+        cutoff = _t.time() - settle_seconds
+        rows = []
+        for table in ("tasks", "archived_tasks"):
+            try:
+                cur = kc.execute(
+                    f"SELECT id, body, created_at FROM {table} "
+                    "WHERE id LIKE 't\\_%' ESCAPE '\\' AND body IS NOT NULL AND TRIM(body)!=''")
+            except sqlite3.OperationalError:
+                continue
+            for tid, body, created in cur:
+                if tid in have or len(rows) >= cap:
+                    continue
+                try:
+                    if created and float(created) > cutoff:
+                        continue
+                except (TypeError, ValueError):
+                    pass
+                fed = _FM in (body or "")
+                rows.append((tid, 1 if fed else 0,
+                             len(_fh(body)) if fed else 0,
+                             _j.dumps(_fh(body)) if fed else "[]", _t.time()))
+        kc.close()
+        if not rows:
+            return 0
+        wc = sqlite3.connect(_PDB, timeout=30)
+        wc.execute("PRAGMA busy_timeout=30000")
+        wc.executemany(
+            "INSERT OR IGNORE INTO task_prior_feed "
+            "(kanban_task_id, prior_fed, n_fed, fed_hashes, created_at) VALUES (?,?,?,?,?)", rows)
+        wc.commit()
+        wc.close()
+        return len(rows)
+    except Exception:
+        return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description="Measure/price the shelf's independence")
     ap.add_argument("--check", action="store_true",
@@ -558,6 +615,9 @@ def main():
     conn = ro()
     if args.check:
         print("=== independence self-arming check ===")
+        swept = sweep_missing_stamps()
+        if swept:
+            print(f"  sweep: stamped {swept} newly-created unstamped tasks")
         state = check_and_arm(conn)
     else:
         state = armed_state()

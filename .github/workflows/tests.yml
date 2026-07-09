@@ -1,0 +1,25 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  invariants:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Minimal verified closure: the suite loads nothing third-party beyond
+      # pytest at runtime; PyYAML + numpy are the third-party imports reachable
+      # from the tested modules. faiss/torch/sentence-transformers belong to
+      # RAG lanes the invariant tests never touch.
+      - name: Install test dependencies
+        run: python -m pip install pytest PyYAML numpy
+
+      - name: Run invariant suite
+        run: HERMES_HOME=$(mktemp -d) python -m pytest tests/ -q
