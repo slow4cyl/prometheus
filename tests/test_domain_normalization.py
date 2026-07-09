@@ -59,3 +59,24 @@ def test_normalization_is_idempotent_and_canonicalizes_format():
 def test_empty_and_none_pass_through():
     assert wwr.normalize_domain("") == ""
     assert wwr.normalize_domain(None) is None
+
+
+def test_all_policy_copies_agree_with_canonical():
+    """2026-07-09: TWO more stale copies found (topology_common._MERGES and
+    normalize_all_domains.SEMANTIC_MERGES — the latter bulk-REWRITES both DBs
+    every 15 minutes via domain-taxonomy-maintenance). Pin every module that
+    exposes domain canonicalization to the single source of truth."""
+    import topology_common
+    import normalize_all_domains
+    probes = BANNED_LOSSY + list(KEPT_SYNONYMS) + ["Some-Novel Domain/x"]
+    for d in probes:
+        assert topology_common.normalize_domain(d) == wwr.normalize_domain(d), d
+        assert normalize_all_domains.canonical_for(d) == (wwr.normalize_domain(d) or ""), d
+
+
+def test_empty_domains_are_not_swept_into_calibration():
+    """The NULL->'calibration' bulk UPDATE was the 'general' sweep in DB form;
+    normalize_all_domains must no longer contain it."""
+    import inspect, normalize_all_domains
+    src = inspect.getsource(normalize_all_domains)
+    assert "SET domain = 'calibration' WHERE" not in src

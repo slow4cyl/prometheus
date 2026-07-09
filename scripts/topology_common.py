@@ -61,37 +61,13 @@ RECLASSIFIED_LOG = os.path.join(HERMES, "classifier", "routing_log_reclassified.
 CACHE_PATH = os.path.join(HERMES, "classifier", "topology_cache.json")
 
 # Bump when the dedupe logic / merge table changes so stale caches are discarded.
-CACHE_VERSION = 2
+CACHE_VERSION = 3
 
 
 # Canonical domain merges — single source of truth for both visualizers.
-_MERGES = {
-    'prompt_injection_detection': 'injection_detection',
-    'prompt_injection': 'injection_detection',
-    'security_injection_detection': 'injection_detection',
-    'security_injection': 'injection_detection',
-    'adversarial_detection': 'adversarial_ml',
-    'ml_safety': 'safety', 'ml_security': 'safety',
-    'tardigrade_biology': 'biology',
-    'ensemble': 'ensemble_methods', 'ensemble_learning': 'ensemble_methods',
-    'hallucination_detection': 'injection_detection',
-    'cross_pollination': 'cross_domain',
-    'synthesis': 'meta_analysis', 'meta': 'meta_analysis',
-    'meta_learning': 'meta_analysis', 'meta_cognition': 'meta_analysis',
-    'meta_research': 'meta_analysis',
-    'injection': 'injection_detection',
-    'defense': 'safety', 'attack': 'adversarial_ml',
-    'general': 'calibration',
-    'dispatch': 'dispatch_pipeline', 'dict': 'dict_methodology',
-    'rag': 'injection_detection', 'rag_dedup': 'injection_detection',
-    'rag_safety': 'injection_detection',
-    'embedding': 'embedding', 'embeddings': 'embedding',
-    'cross_lingual': 'nlp', 'rlhf': 'calibration',
-    'distillation': 'optimization',
-    'financial_fraud_detection': 'finance', 'financial_markets': 'finance',
-    'ai_safety': 'safety',
-    'nlp_injection': 'nlp', 'nlp_safety': 'nlp',
-}
+# _MERGES removed 2026-07-09 — it was a stale copy of the pre-2026-06-08
+# lossy domain policy. Normalization now delegates to the single source of
+# truth (write_worker_result.normalize_domain); memoization kept here.
 
 _norm_cache = {}
 
@@ -103,14 +79,8 @@ def normalize_domain(domain):
     cached = _norm_cache.get(domain)
     if cached is not None:
         return cached
-    d = domain.strip().lower()
-    d = re.sub(r'[\s\-/]+', '_', d)
-    d = re.sub(r'[^a-z0-9_]', '', d)
-    d = re.sub(r'_+', '_', d).strip('_')
-    if not d:
-        _norm_cache[domain] = domain
-        return domain
-    result = _MERGES.get(d, d)
+    from write_worker_result import normalize_domain as _canonical
+    result = _canonical(domain)
     _norm_cache[domain] = result
     return result
 

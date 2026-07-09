@@ -1,0 +1,17 @@
+# Prometheus research-layer dependencies (the hermes-agent substrate brings
+# its own; plugin imports of agent/cron/hermes_cli resolve from there).
+# Core — used across the cron lanes:
+numpy
+requests
+PyYAML
+
+# Semantic dedup / RAG lanes (experiment_rag, pre_check_dedup, faiss_dedup):
+faiss-cpu
+sentence-transformers
+
+# Symbolic verifier lane:
+mpmath
+
+# Optional — single script (predeploy_entropy.py); skip unless you run it:
+# torch
+# transformers
