@@ -4,17 +4,9 @@
 
 > **No relation to [Prometheus monitoring](https://prometheus.io)** — this project shares only the name.
 
-## Prerequisite
-
-Prometheus is a research layer, not a standalone agent runtime. It **requires
-[hermes-agent](https://github.com/NousResearch/hermes-agent)** — the open-source
-agent substrate that provides the gateway, kanban dispatcher, worker spawning,
-cron ticker, and plugin system this repo builds on. Install it first
-(see `SETUP.md`), then lay Prometheus on top.
-
 Prometheus turns a single Linux box with one GPU into a self-directing research fleet: it generates its own questions, dispatches LLM workers to run real experiments with preserved code, extracts claims with scoped confidence, and then spends a large fraction of its compute **attacking its own conclusions** — adversarial replication, cross-domain disconfirmation, novelty verification against the actual literature indexes, and calibration audits that measure how often the system's own confidence is wrong.
 
-It is not a chatbot, not a demo loop, and not turnkey. It is a working reference deployment: ~90 scheduled jobs, ~100 orchestration scripts, two SQLite WAL databases, three fail-open runtime plugins, and a local vLLM worker fleet on a single RTX 5090 — running continuously — over 130,000 experiments across 107,000+ dispatched tasks to date. Built solo, from scratch, in about a month, on one consumer gaming PC — as a first project.
+It is not a chatbot, not a demo loop, and not turnkey. It is a working reference deployment: ~90 scheduled jobs, ~100 orchestration scripts, two SQLite WAL databases, three fail-open runtime plugins, and a local vLLM worker fleet on a single RTX 5090 — running continuously — over 130,000 experiments across 107,000+ dispatched tasks as of July 2026. Built solo, from scratch, in about a month, on one consumer gaming PC — as a first project.
 
 ---
 
@@ -23,7 +15,8 @@ It is not a chatbot, not a demo loop, and not turnkey. It is a working reference
 The field's autonomous-research generators have outrun their validators; the
 open problem is trust. So before the architecture, here is what this system
 measured about **its own** trustworthiness — the numbers most projects don't
-publish:
+publish (snapshot: July 2026, reference deployment; the live values move on
+its dashboard):
 
 | It asked itself | Measured | Response |
 |---|---|---|
@@ -36,6 +29,16 @@ Every number above was produced by a scheduled job in this repo, against the
 system's own knowledge base, and survives on the live dashboard. The honest
 readings are the feature: a research system that can't tell you where it
 fools itself can't be trusted where it doesn't.
+
+---
+
+## Prerequisite
+
+Prometheus is a research layer, not a standalone agent runtime. It **requires
+[hermes-agent](https://github.com/NousResearch/hermes-agent)** — the open-source
+agent substrate that provides the gateway, kanban dispatcher, worker spawning,
+cron ticker, and plugin system this repo builds on. Install it first
+(see `SETUP.md`), then lay Prometheus on top.
 
 ---
 
