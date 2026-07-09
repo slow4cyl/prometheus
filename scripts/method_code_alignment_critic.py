@@ -95,7 +95,16 @@ def ensure_state(conn):
     conn.commit()
 
 
-def get_candidates(conn, limit, only_claim=None):
+def get_candidates(conn, limit, only_claim=None, scan_budget_s=240):
+    """scan_budget_s (2026-07-09): the scan walks candidates (evidence query +
+    artifact find_code per claim) until it collects `limit` unreviewed claims
+    WITH preserved code. As the reviewed set grows the scan digs deeper each
+    run — at ~650 reviews it crossed the 300s cron timeout (progressive
+    slowdown by design). Budgeted scan: stop gracefully at the deadline and
+    review what was collected; the next run continues deeper. Semantics
+    otherwise identical."""
+    import time as _time
+    _deadline = _time.time() + scan_budget_s
     where_claim = f"AND kc.id = {int(only_claim)}" if only_claim else ""
     rows = conn.execute(f"""
         SELECT kc.id, kc.hypothesis_text, kc.claim_summary, kc.claim_status,
@@ -114,8 +123,16 @@ def get_candidates(conn, limit, only_claim=None):
     """).fetchall()
 
     hermes = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    # One query instead of a per-claim SELECT: the full reviewed set.
+    seen_pairs = set(conn.execute(
+        "SELECT claim_id, evidence_fingerprint FROM method_code_reviews "
+        "WHERE mismatch IS NOT NULL"))
     out = []
+    truncated = False
     for row in rows:
+        if _time.time() > _deadline:
+            truncated = True
+            break
         evid = conn.execute("""
             SELECT ce.experiment_id,
                    COALESCE(NULLIF(TRIM(ce.key_finding), ''), e.result) AS finding,
@@ -139,15 +156,14 @@ def get_candidates(conn, limit, only_claim=None):
             continue
         fp = hashlib.md5(("|".join(sorted(e["experiment_id"] or "" for e in exps))
                           + f"#{len(exps)}").encode()).hexdigest()
-        seen = conn.execute(
-            "SELECT 1 FROM method_code_reviews WHERE claim_id = ? "
-            "AND evidence_fingerprint = ? AND mismatch IS NOT NULL LIMIT 1",
-            (row["id"], fp)).fetchone()
-        if seen and not only_claim:
+        if (row["id"], fp) in seen_pairs and not only_claim:
             continue
         out.append({"claim": row, "exps": exps, "fingerprint": fp})
         if len(out) >= limit:
             break
+    if truncated:
+        print(f"  [scan budget hit after {scan_budget_s}s — reviewing "
+              f"{len(out)} collected candidates; next run continues deeper]")
     return out
 
 
@@ -219,14 +235,21 @@ VOTES = 3   # majority vote — the reasoning judge is non-deterministic (flip-f
             # + intermittent unparseable output); one call can't be trusted to gate.
 
 
-def judge(prompt):
+def judge(prompt, deadline=None):
     """Majority vote over VOTES independent judge calls. Retries absorb the parse
     failures; a MISMATCH requires a strict majority of the parseable votes to say
     mismatch at conf >= FLAG_CONFIDENCE — one bad run can never cap a claim. Returns
-    {mismatch, confidence, reason, votes} or None if a quorum (>=2) never parsed."""
+    {mismatch, confidence, reason, votes} or None if a quorum (>=2) never parsed.
+
+    deadline (2026-07-09): hard wall-clock cutoff. One judge() could run
+    5 votes x 60s-timeout calls (~325s) and blow the 300s cron budget solo
+    when the endpoint is slow (observed: 13s for a trivial call). Voting
+    stops at the deadline; quorum logic unchanged (>=2 parseable or None)."""
     verdicts = []
     for _ in range(VOTES + 2):              # a couple of extra tries to reach quorum
         if len(verdicts) >= VOTES:
+            break
+        if deadline is not None and time.time() > deadline:
             break
         v = parse_review(call_llm(prompt, max_tokens=1600))
         if v is not None:
@@ -262,12 +285,15 @@ def main():
     flagged = aligned = failed = 0
     t0 = time.time()
     for c in cands:
-        if time.time() - t0 > 240:   # cron ticker kills at 300s; majority-vote is ~3x slower
+        # Start-cutoff 150s + a hard 270s deadline threaded into judge(): a
+        # claim started late gets a truncated vote (quorum >=2 still applies)
+        # instead of overrunning the 300s cron kill (2026-07-09).
+        if time.time() - t0 > 150:
             print("  wall budget reached — deferring remaining claims")
             break
         claim = c["claim"]
         method_text = (claim["claim_summary"] or claim["hypothesis_text"] or "")[:1400]
-        review = judge(build_prompt(method_text, c["exps"]))
+        review = judge(build_prompt(method_text, c["exps"]), deadline=t0 + 270)
         code_seen = len(c["exps"])
         if review is None:
             failed += 1
