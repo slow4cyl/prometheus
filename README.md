@@ -14,7 +14,7 @@ cron ticker, and plugin system this repo builds on. Install it first
 
 Prometheus turns a single Linux box with one GPU into a self-directing research fleet: it generates its own questions, dispatches LLM workers to run real experiments with preserved code, extracts claims with scoped confidence, and then spends a large fraction of its compute **attacking its own conclusions** — adversarial replication, cross-domain disconfirmation, novelty verification against the actual literature indexes, and calibration audits that measure how often the system's own confidence is wrong.
 
-It is not a chatbot, not a demo loop, and not turnkey. It is a working reference deployment: ~90 scheduled jobs, ~100 orchestration scripts, two SQLite WAL databases, three fail-open runtime plugins, and a local vLLM worker fleet on a single RTX 5090 — running continuously and processing over 100,000 tasks to date. Built solo, from scratch, in about a month, on one consumer gaming PC — as a first project.
+It is not a chatbot, not a demo loop, and not turnkey. It is a working reference deployment: ~90 scheduled jobs, ~100 orchestration scripts, two SQLite WAL databases, three fail-open runtime plugins, and a local vLLM worker fleet on a single RTX 5090 — running continuously — over 130,000 experiments across 107,000+ dispatched tasks to date. Built solo, from scratch, in about a month, on one consumer gaming PC — as a first project.
 
 ---
 
@@ -85,9 +85,13 @@ found MONOTONIC-type claims were over-trusted at 67.6% and reweighted them.
 Contradicted claims are not deleted; they are routed to an attack lane and
 fought over.
 
-**It re-tests its simulations against the world.** The toy-vs-world lane
-(`world_grounding.py`) takes claims that were validated in self-generated or
-simulated settings and re-runs them against real external datasets. In the
+**It re-tests its simulations against the world.** Every other gate in the
+system tests coherence — whether the system's runs agree with each other. The
+toy-vs-world lane (`world_grounding.py`) is the only one that tests
+*correspondence*: it takes claims validated in self-generated or simulated
+settings and re-runs them against real external datasets, with the loader
+code preserved and mechanically classified so a worker can't claim
+"tested against real data" while running another simulation. In the
 reference deployment, only **~71% of verified re-tests hold** (15/21) —
 roughly three in ten simulation-validated findings are refused by reality.
 Those refusals aren't buried; they're first-class results the lane records
