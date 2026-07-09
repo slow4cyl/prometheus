@@ -30,6 +30,16 @@ system's own knowledge base, and survives on the live dashboard. The honest
 readings are the feature: a research system that can't tell you where it
 fools itself can't be trusted where it doesn't.
 
+**Receipts:** [`FINDINGS.md`](FINDINGS.md) is a labeled snapshot of actual
+output — the six **reality's refusals** (simulation said yes, real data said
+no), the verified world-holds, and the discovery shelf's top entries with
+their honest caveats attached. The system's self-rendered pages are served
+via GitHub Pages exactly as its hourly cron generated them:
+[knowledge topology](https://slow4cyl.github.io/prometheus/prometheus-topology.html) ·
+[topology 3-D](https://slow4cyl.github.io/prometheus/prometheus-topology-3d.html) ·
+[discoveries board](https://slow4cyl.github.io/prometheus/prometheus-discoveries.html) ·
+[architecture diagram](https://slow4cyl.github.io/prometheus/prometheus-architecture-diagram.html)
+
 ---
 
 ## Prerequisite

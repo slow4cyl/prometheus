@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prometheus Architecture Diagram</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      background: #020617;
+      min-height: 100vh;
+      padding: 2rem;
+      color: #f8fafc;
+    }
+    .container { max-width: 1320px; margin: 0 auto; }
+    .header { margin-bottom: 1.5rem; }
+    .header-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem; }
+    .pulse-dot { width: 12px; height: 12px; background: #22d3ee; border-radius: 50%; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+    h1 { font-size: 1.55rem; font-weight: 700; letter-spacing: -0.025em; }
+    .subtitle { color: #94a3b8; font-size: 0.88rem; margin-left: 1.75rem; line-height: 1.5; }
+    .diagram-container {
+      background: rgba(15, 23, 42, 0.52);
+      border-radius: 1rem;
+      border: 1px solid #1e293b;
+      padding: 1.1rem;
+      overflow-x: auto;
+      box-shadow: 0 18px 60px rgba(0, 0, 0, 0.28);
+    }
+    svg { width: 100%; min-width: 1080px; display: block; }
+    svg text { font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); gap: 1rem; margin-top: 1.5rem; }
+    .card { background: rgba(15, 23, 42, 0.55); border-radius: 0.75rem; border: 1px solid #1e293b; padding: 1.15rem; }
+    .card-header { display: flex; align-items: center; gap: 0.55rem; margin-bottom: 0.75rem; }
+    .card-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .cyan { background: #22d3ee; }
+    .emerald { background: #34d399; }
+    .violet { background: #a78bfa; }
+    .amber { background: #fbbf24; }
+    .rose { background: #fb7185; }
+    .card h3 { font-size: 0.9rem; font-weight: 600; }
+    .card ul { list-style: none; color: #94a3b8; font-size: 0.75rem; line-height: 1.5; }
+    .footer { text-align: center; margin-top: 1.25rem; color: #475569; font-size: 0.72rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>Prometheus Architecture</h1>
+      </div>
+      <p class="subtitle">Simplified map: one main loop, one validation layer, one runtime layer. Details are grouped instead of drawn as crossing wires.</p>
+    </div>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1280 980" role="img" aria-labelledby="diagram-title diagram-desc">
+        <title id="diagram-title">Simplified Prometheus architecture map</title>
+        <desc id="diagram-desc">A simplified dark SVG diagram showing the Prometheus research loop, validation lanes, local model services, GPU acceleration, databases, and Hermes fork dependencies.</desc>
+        <defs>
+          <marker id="arrow-cyan" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#22d3ee" /></marker>
+          <marker id="arrow-emerald" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#34d399" /></marker>
+          <marker id="arrow-violet" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#a78bfa" /></marker>
+          <marker id="arrow-amber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24" /></marker>
+          <marker id="arrow-orange" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#fb923c" /></marker>
+          <marker id="arrow-rose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto"><polygon points="0 0, 10 3.5, 0 7" fill="#fb7185" /></marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+          </pattern>
+          <style>
+            .boundary { fill: rgba(251, 191, 36, 0.045); stroke: #fbbf24; stroke-width: 1.1; stroke-dasharray: 8,4; }
+            .gate-boundary { fill: rgba(136, 19, 55, 0.035); stroke: #fb7185; stroke-width: 1; stroke-dasharray: 4,4; }
+            .mask { fill: #0f172a; }
+            .frontend { fill: rgba(8, 51, 68, 0.4); stroke: #22d3ee; stroke-width: 1.5; }
+            .backend { fill: rgba(6, 78, 59, 0.4); stroke: #34d399; stroke-width: 1.5; }
+            .database { fill: rgba(76, 29, 149, 0.4); stroke: #a78bfa; stroke-width: 1.5; }
+            .cloud { fill: rgba(120, 53, 15, 0.3); stroke: #fbbf24; stroke-width: 1.5; }
+            .security { fill: rgba(136, 19, 55, 0.4); stroke: #fb7185; stroke-width: 1.5; }
+            .bus { fill: rgba(251, 146, 60, 0.3); stroke: #fb923c; stroke-width: 1.5; }
+            .external { fill: rgba(30, 41, 59, 0.5); stroke: #94a3b8; stroke-width: 1.5; }
+            .label { fill: #f8fafc; font-size: 13px; font-weight: 700; text-anchor: middle; }
+            .sub { fill: #94a3b8; font-size: 9px; text-anchor: middle; }
+            .tiny { fill: #cbd5e1; font-size: 8px; text-anchor: middle; }
+            .left { fill: #cbd5e1; font-size: 8px; }
+            .title { fill: #f8fafc; font-size: 12px; font-weight: 700; }
+            .boundary-label { fill: #fbbf24; font-size: 10px; font-weight: 700; }
+            .gate-label { fill: #fb7185; font-size: 10px; font-weight: 700; }
+            .arrow-label { fill: #94a3b8; font-size: 9px; text-anchor: middle; }
+          </style>
+        </defs>
+
+        <rect width="100%" height="100%" fill="url(#grid)"/>
+
+        <!-- Boundaries -->
+        <rect x="50" y="50" width="1180" height="330" rx="14" class="boundary"/>
+        <text x="70" y="72" class="boundary-label">MAIN RESEARCH LOOP</text>
+        <rect x="50" y="430" width="1180" height="205" rx="14" class="gate-boundary"/>
+        <text x="70" y="452" class="gate-label">VALIDATION + EPISTEMIC GATES</text>
+        <rect x="50" y="685" width="1180" height="165" rx="14" class="boundary"/>
+        <text x="70" y="707" class="boundary-label">LOCAL RUNTIME + GPU UTILIZATION</text>
+
+        <!-- Main loop arrows only: left-to-right then one clean feedback line -->
+        <line x1="270" y1="205" x2="330" y2="205" stroke="#fb923c" stroke-width="2" marker-end="url(#arrow-orange)"/>
+        <text x="300" y="192" class="arrow-label">refill</text>
+        <line x1="500" y1="205" x2="560" y2="205" stroke="#34d399" stroke-width="2" marker-end="url(#arrow-emerald)"/>
+        <text x="530" y="192" class="arrow-label">dispatch</text>
+        <line x1="760" y1="205" x2="820" y2="205" stroke="#a78bfa" stroke-width="2" marker-end="url(#arrow-violet)"/>
+        <text x="790" y="192" class="arrow-label">write result</text>
+        <line x1="995" y1="205" x2="1055" y2="205" stroke="#34d399" stroke-width="2" marker-end="url(#arrow-emerald)"/>
+        <text x="1025" y="192" class="arrow-label">apply</text>
+        <path d="M 1130 280 L 1130 337 Q 1130 357 1110 357 L 170 357 Q 150 357 150 337 L 150 286" fill="none" stroke="#fb923c" stroke-width="2" marker-end="url(#arrow-orange)"/>
+        <text x="640" y="348" fill="#fb923c" font-size="9" text-anchor="middle">follow-ups: transfer questions, mutations, synthesis, compression</text>
+
+        <!-- One vertical validation connection, one runtime connection -->
+        <line x1="640" y1="380" x2="640" y2="430" stroke="#fb7185" stroke-width="2" stroke-dasharray="6,5" marker-end="url(#arrow-rose)"/>
+        <text x="672" y="410" fill="#fb7185" font-size="9">challenge + calibrate</text>
+        <line x1="640" y1="685" x2="640" y2="636" stroke="#fbbf24" stroke-width="2" stroke-dasharray="6,5" marker-end="url(#arrow-amber)"/>
+        <text x="678" y="664" fill="#fbbf24" font-size="9">models + GPU</text>
+
+        <!-- Main nodes -->
+        <g>
+          <rect x="90" y="125" width="180" height="160" rx="8" class="mask"/>
+          <rect x="90" y="125" width="180" height="160" rx="8" class="database"/>
+          <text x="180" y="153" class="label">1. Questions</text>
+          <text x="180" y="173" class="sub">prometheus.db</text>
+          <text x="180" y="200" class="tiny">curiosities</text>
+          <text x="180" y="217" class="tiny">scores + lane priorities</text>
+          <text x="180" y="234" class="tiny">parent lineage</text>
+          <text x="180" y="251" class="tiny">evidence_depth</text>
+          <text x="180" y="271" fill="#a78bfa" font-size="8" text-anchor="middle">what should run next?</text>
+        </g>
+
+        <g>
+          <rect x="330" y="125" width="170" height="160" rx="8" class="mask"/>
+          <rect x="330" y="125" width="170" height="160" rx="8" class="bus"/>
+          <text x="415" y="153" class="label">2. Task Queue</text>
+          <text x="415" y="173" class="sub">kanban.db</text>
+          <text x="415" y="200" class="tiny">task_refiller 2m</text>
+          <text x="415" y="217" class="tiny">priority 4/3/2/1/0</text>
+          <text x="415" y="234" class="tiny">RAG prior feed</text>
+          <text x="415" y="251" class="tiny">blind-lane stamps</text>
+          <text x="415" y="271" fill="#fb923c" font-size="8" text-anchor="middle">turn questions into cards</text>
+        </g>
+
+        <g>
+          <rect x="560" y="125" width="200" height="160" rx="8" class="mask"/>
+          <rect x="560" y="125" width="200" height="160" rx="8" class="backend"/>
+          <text x="660" y="153" class="label">3. Workers</text>
+          <text x="660" y="173" class="sub">stateless LLM sessions</text>
+          <text x="660" y="200" class="tiny">~20 concurrent</text>
+          <text x="660" y="217" class="tiny">real code + experiments</text>
+          <text x="660" y="234" class="tiny">mimo · A1 · deepseek · free</text>
+          <text x="660" y="251" class="tiny">confidence cap 0.85</text>
+          <text x="660" y="271" fill="#34d399" font-size="8" text-anchor="middle">workers die; DB memory stays</text>
+        </g>
+
+        <g>
+          <rect x="820" y="125" width="175" height="160" rx="8" class="mask"/>
+          <rect x="820" y="125" width="175" height="160" rx="8" class="database"/>
+          <text x="907.5" y="153" class="label">4. Intake</text>
+          <text x="907.5" y="173" class="sub">worker_results</text>
+          <text x="907.5" y="200" class="tiny">write_worker_result</text>
+          <text x="907.5" y="217" class="tiny">result_bridge 10m</text>
+          <text x="907.5" y="234" class="tiny">quality gate ≥ 40</text>
+          <text x="907.5" y="251" class="tiny">artifacts + manifest</text>
+          <text x="907.5" y="271" fill="#a78bfa" font-size="8" text-anchor="middle">raw findings land here</text>
+        </g>
+
+        <g>
+          <rect x="1055" y="125" width="145" height="160" rx="8" class="mask"/>
+          <rect x="1055" y="125" width="145" height="160" rx="8" class="backend"/>
+          <text x="1127.5" y="153" class="label">5. Knowledge</text>
+          <text x="1127.5" y="173" class="sub">experiments + claims</text>
+          <text x="1127.5" y="200" class="tiny">maturity tiers</text>
+          <text x="1127.5" y="217" class="tiny">mechanisms</text>
+          <text x="1127.5" y="234" class="tiny">transfer_tracking</text>
+          <text x="1127.5" y="251" class="tiny">claim_evidence</text>
+          <text x="1127.5" y="271" fill="#34d399" font-size="8" text-anchor="middle">what the system learned</text>
+        </g>
+
+        <!-- Validation layer: no internal arrows -->
+        <g>
+          <rect x="90" y="485" width="250" height="100" rx="8" class="mask"/>
+          <rect x="90" y="485" width="250" height="100" rx="8" class="cloud"/>
+          <text x="215" y="513" class="label">External Truth</text>
+          <text x="215" y="533" class="sub">BENCH3 + calibration</text>
+          <text x="215" y="554" class="tiny">known-answer probes · domain accuracy</text>
+          <text x="215" y="571" fill="#fbbf24" font-size="8" text-anchor="middle">validates answers</text>
+        </g>
+
+        <g>
+          <rect x="390" y="485" width="250" height="100" rx="8" class="mask"/>
+          <rect x="390" y="485" width="250" height="100" rx="8" class="security"/>
+          <text x="515" y="513" class="label">Claim Gauntlet</text>
+          <text x="515" y="533" class="sub">retests · attacks · arbitration</text>
+          <text x="515" y="554" class="tiny">SA · circularity · method/code</text>
+          <text x="515" y="571" fill="#fb7185" font-size="8" text-anchor="middle">challenges evidence before belief</text>
+        </g>
+
+        <g>
+          <rect x="690" y="485" width="250" height="100" rx="8" class="mask"/>
+          <rect x="690" y="485" width="250" height="100" rx="8" class="cloud"/>
+          <text x="815" y="513" class="label">Novelty + World</text>
+          <text x="815" y="533" class="sub">literature · discovery shelf</text>
+          <text x="815" y="554" class="tiny">finder · scholar_search · world_grounding</text>
+          <text x="815" y="571" fill="#fbbf24" font-size="8" text-anchor="middle">separates novelty from robustness</text>
+        </g>
+
+        <g>
+          <rect x="990" y="485" width="190" height="100" rx="8" class="mask"/>
+          <rect x="990" y="485" width="190" height="100" rx="8" class="bus"/>
+          <text x="1085" y="513" class="label">Synthesis</text>
+          <text x="1085" y="533" class="sub">compression + topology</text>
+          <text x="1085" y="554" class="tiny">auto_tune · outcome routing</text>
+          <text x="1085" y="571" fill="#fb923c" font-size="8" text-anchor="middle">turns structure into questions</text>
+        </g>
+
+        <!-- Runtime layer -->
+        <g>
+          <rect x="90" y="735" width="195" height="75" rx="8" class="mask"/>
+          <rect x="90" y="735" width="195" height="75" rx="8" class="backend"/>
+          <text x="187.5" y="761" class="label">Agents-A1 :8001</text>
+          <text x="187.5" y="779" class="sub">local vLLM Qwen3.5-MoE</text>
+          <text x="187.5" y="797" fill="#34d399" font-size="8" text-anchor="middle">transfer/exp lanes + attacks</text>
+        </g>
+
+        <g>
+          <rect x="325" y="735" width="195" height="75" rx="8" class="mask"/>
+          <rect x="325" y="735" width="195" height="75" rx="8" class="database"/>
+          <text x="422.5" y="761" class="label">GPU Embed :9150</text>
+          <text x="422.5" y="779" class="sub">Qwen3-Embedding-0.6B</text>
+          <text x="422.5" y="797" fill="#a78bfa" font-size="8" text-anchor="middle">RAG · compression · similarity</text>
+        </g>
+
+        <g>
+          <rect x="560" y="735" width="195" height="75" rx="8" class="mask"/>
+          <rect x="560" y="735" width="195" height="75" rx="8" class="cloud"/>
+          <text x="657.5" y="761" class="label">GPU Sklearn</text>
+          <text x="657.5" y="779" class="sub">transparent .pth hook</text>
+          <text x="657.5" y="797" fill="#fbbf24" font-size="8" text-anchor="middle">LR · PCA · Scaler · KNN</text>
+        </g>
+
+        <g>
+          <rect x="795" y="735" width="195" height="75" rx="8" class="mask"/>
+          <rect x="795" y="735" width="195" height="75" rx="8" class="cloud"/>
+          <text x="892.5" y="761" class="label">vllm-env + gpu_run</text>
+          <text x="892.5" y="779" class="sub">torch/CUDA runtime</text>
+          <text x="892.5" y="797" fill="#fbbf24" font-size="8" text-anchor="middle">load-bearing; workers depend on it</text>
+        </g>
+
+        <g>
+          <rect x="1030" y="735" width="150" height="75" rx="8" class="mask"/>
+          <rect x="1030" y="735" width="150" height="75" rx="8" class="security"/>
+          <text x="1105" y="761" class="label">Hermes Fork</text>
+          <text x="1105" y="779" class="sub">15-file patch stack</text>
+          <text x="1105" y="797" fill="#fb7185" font-size="8" text-anchor="middle">routing + guard + venv fixes</text>
+        </g>
+
+        <!-- Legend outside all boundaries: lowest boundary bottom = 850 -->
+        <g>
+          <text x="70" y="890" fill="#f8fafc" font-size="11" font-weight="700">Legend</text>
+          <rect x="70" y="905" width="18" height="11" rx="2" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1"/>
+          <text x="96" y="914" fill="#94a3b8" font-size="8">workers/services/scripts</text>
+          <rect x="245" y="905" width="18" height="11" rx="2" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1"/>
+          <text x="271" y="914" fill="#94a3b8" font-size="8">databases/artifacts/indexes</text>
+          <rect x="445" y="905" width="18" height="11" rx="2" fill="rgba(251, 146, 60, 0.3)" stroke="#fb923c" stroke-width="1"/>
+          <text x="471" y="914" fill="#94a3b8" font-size="8">queue/generation bus</text>
+          <rect x="620" y="905" width="18" height="11" rx="2" fill="rgba(136, 19, 55, 0.4)" stroke="#fb7185" stroke-width="1"/>
+          <text x="646" y="914" fill="#94a3b8" font-size="8">epistemic gates/fork risk</text>
+          <rect x="835" y="905" width="18" height="11" rx="2" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1"/>
+          <text x="861" y="914" fill="#94a3b8" font-size="8">external/local GPU runtime</text>
+          <line x1="70" y1="940" x2="115" y2="940" stroke="#34d399" stroke-width="1.8" marker-end="url(#arrow-emerald)"/>
+          <text x="126" y="943" fill="#94a3b8" font-size="8">solid = main flow</text>
+          <line x1="245" y1="940" x2="290" y2="940" stroke="#fb7185" stroke-width="1.8" stroke-dasharray="6,5" marker-end="url(#arrow-rose)"/>
+          <text x="301" y="943" fill="#94a3b8" font-size="8">dashed = grouped support/validation, not every call</text>
+        </g>
+      </svg>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-header"><div class="card-dot emerald"></div><h3>Main loop</h3></div>
+        <ul>
+          <li>• Questions live in `prometheus.db`; runnable cards live in `kanban.db`.</li>
+          <li>• Workers are stateless; the databases are the memory.</li>
+          <li>• Intake turns worker results into experiments, claims, mechanisms, and follow-up questions.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-dot rose"></div><h3>Trust layer</h3></div>
+        <ul>
+          <li>• BENCH3 checks answer correctness; transfer survival checks mechanism portability.</li>
+          <li>• Retests, attacks, arbitration, clean-room, circularity, and method-code checks challenge claims.</li>
+          <li>• Literature and world-grounding keep novelty separate from robustness.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-dot amber"></div><h3>Utilization</h3></div>
+        <ul>
+          <li>• Agents-A1 handles local reasoning lanes and some attacks.</li>
+          <li>• GPU Embed powers RAG, synthesis, and similarity.</li>
+          <li>• GPU sklearn and `gpu_run` give workers transparent GPU-backed compute.</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="footer">Prometheus architecture diagram · Simplified from ~/.hermes/docs/architecture-map.md · Offline HTML/SVG</p>
+  </div>
+</body>
+</html>
