@@ -49,6 +49,7 @@ CRON_JOBS_PATH = os.path.expanduser("~/.hermes/cron/jobs.json")
 TOPOLOGY_EXPORT = os.path.expanduser("~/.hermes/topology_full_export.json")
 ARMED_PATH = os.path.expanduser("~/.hermes/independence_armed.json")
 WORLD_CAL_PATH = os.path.expanduser("~/.hermes/world_calibration.json")
+WORLD_GATE_PATH = os.path.expanduser("~/.hermes/world_gate_armed.json")
 MECH_CAL_PATH = os.path.expanduser("~/.hermes/mechanism_calibration.json")
 META_CAL_PATH = os.path.expanduser("~/.hermes/meta_transfer_calibration.json")
 NOVELTY_CAL_PATH = os.path.expanduser("~/.hermes/novelty_calibration.json")
@@ -609,11 +610,24 @@ def get_discovery():
         FROM world_groundings wg JOIN knowledge_claims kc ON kc.id = wg.claim_id
         WHERE UPPER(COALESCE(wg.outcome,wg.status,'')) LIKE '%FAIL%' AND wg.verified=1
         ORDER BY wg.claim_id LIMIT 8""").fetchall()
+    # world GATE (2026-07-09): armed state + how many claims it currently caps
+    # (a verified world-FAILS blocks ESTABLISHED — the claim is held at REPLICATED)
+    wgate = load_json(WORLD_GATE_PATH) or {}
+    wgate_capped = db.execute("""
+        SELECT COUNT(DISTINCT wg.claim_id) FROM world_groundings wg
+        JOIN knowledge_claims kc ON kc.id = wg.claim_id
+        WHERE wg.status='resolved' AND wg.outcome='FAILS' AND wg.verified=1
+          AND kc.claim_status='REPLICATED'""").fetchone()[0]
+    wgate_scope = db.execute("""
+        SELECT COUNT(DISTINCT claim_id) FROM world_groundings
+        WHERE status='resolved' AND outcome='FAILS' AND verified=1""").fetchone()[0]
     db.close()
     return {"routes": route_rows, "top": top_rows,
             "knocked": {r["route"]: r["c"] for r in knocked},
             "shelf": shelf, "n_shelf": spot.get("n_shelf", len(shelf)), "spot_age": spot_age,
             "world": world, "world_outcomes": wout,
+            "world_gate": {"armed": bool(wgate.get("armed")),
+                           "capped": wgate_capped, "scope": wgate_scope},
             "world_fails": [dict(r) for r in wfails]}
 
 
@@ -1368,6 +1382,11 @@ def render_discovery(disc):
                f'{_fmt_num(wo.get("FAILS", 0))} more unverified — the treasure: confident + wrong')
         + stat("no dataset", _fmt_num(wo.get("NO_DATASET_verified", 0) + wo.get("NO_DATASET", 0)),
                "maps the toy-boundary")
+        + stat("world gate",
+               ("ARMED" if (disc.get("world_gate") or {}).get("armed") else "off"),
+               (lambda wg: f'caps {wg.get("capped", 0)}/{wg.get("scope", 0)} verified-FAILS claims '
+                           f'from ESTABLISHED' if wg.get("armed")
+                           else "report-only")(disc.get("world_gate") or {}))
         + "</div>"
         + panel("Reality's refusals — verified world-FAILS",
                 fail_rows or '<div class="empty">none verified yet</div>',

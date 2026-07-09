@@ -69,6 +69,17 @@ WORLD_MODEL = os.environ.get("HERMES_WORLD_MODEL", "deepseek/deepseek-v4-flash")
 MAX_PENDING = 3
 
 OUTCOME_RE = re.compile(r"WORLD_OUTCOME:\s*(HOLDS|FAILS|NO_DATASET)", re.I)
+# 2026-07-09: workers testing on real data often reach a genuinely PARTIAL
+# result (e.g. "PARTIAL_HOLD: mechanism confirmed on multimodal, refuted on
+# unimodal") and emit a non-contract WORLD_OUTCOME token the strict regex
+# above can't parse — the row then resolved outcome=NULL and sat in limbo,
+# re-consuming a pending slot every reconcile. Recognize those tokens and
+# record them as MIXED: the row RESOLVES (stops re-targeting) but MIXED is
+# NEVER verified, so it can never enter the verified HOLDS/FAILS calibration
+# number. A partial is honest data, not a clean world verdict.
+PARTIAL_RE = re.compile(
+    r"WORLD_OUTCOME:\s*(PARTIAL[_A-Z]*|NO_CLEAR[_A-Z]*|MIXED|INCONCLUSIVE|"
+    r"AMBIGUOUS|REGIME[_A-Z]*)", re.I)
 DATASET_RE = re.compile(r"DATASET:\s*(.+)", re.I)
 
 # ---------------------------------------------------------------------------
@@ -298,7 +309,12 @@ def reconcile(conn):
             continue
         text = wr["result"]
         m = OUTCOME_RE.search(text)
-        outcome = m.group(1).upper() if m else None
+        if m:
+            outcome = m.group(1).upper()
+        elif PARTIAL_RE.search(text):
+            outcome = "MIXED"   # resolves the row; never verified (see below)
+        else:
+            outcome = None
         dm = DATASET_RE.search(text)
         dataset = dm.group(1).strip()[:300] if dm else None
         basis, ev = world_basis(wg["kanban_task_id"])
