@@ -1,0 +1,4 @@
+name: prometheus-runtime-tuning
+version: 1.0.0
+description: "Two independent sentinel-guarded runtime patches replacing fork hunks (defork-plan routes 'runtime_patch_plugin'): (1) cron MIN_GRACE floor raised 120s->300s by wrapping cron.jobs._compute_grace_seconds (site tuning for the loaded box — missed jobs up to 5 min stale catch up instead of fast-forwarding); (2) redaction removed from kanban_complete outputs / kanban_comment bodies by rebinding tools.kanban_tools.redact_sensitive_text to identity (single-user fleet; DB writes must keep raw values). Each patch fingerprints the upstream base text first; on drift it fails OPEN — writes ~/.hermes/PATCH_FAILED_<name>, logs loudly, leaves base behavior intact. No-ops when the module is already fork-shaped (pre-surgery live tree)."
+author: "prometheus fork"

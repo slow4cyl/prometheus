@@ -1,0 +1,17 @@
+[Unit]
+Description=Agents-A1 Kanban local-first router
+Documentation=https://hermes-agent.nousresearch.com/docs/user-guide/features/kanban
+After=agents-a1-fp4.service
+Wants=agents-a1-fp4.service
+
+[Service]
+Type=simple
+Environment=HERMES_HOME=%h/.hermes
+Environment=HERMES_KANBAN_DB=%h/.hermes/kanban.db
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/env python3 %h/.hermes/scripts/a1_router.py --live --interval 10 --cap 8 --base-url http://localhost:8001/v1 --log %h/.hermes/logs/a1_router.log
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

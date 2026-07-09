@@ -1,0 +1,40 @@
+[Unit]
+Description=Agents-A1 TextOnly-FP4 (vLLM) - text-only NVFP4 candidate, fp8-KV-native
+After=default.target
+# Retry forever (with RestartSec pacing) — never park in failed state while
+# waiting out VRAM contention. Must live in [Unit], not [Service].
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+Environment=VLLM_USE_FLASHINFER_SAMPLER=0
+ExecStart=%h/vllm-env/bin/vllm serve %h/models/Agents-A1-TextOnly-FP4 \
+    --served-model-name agents-a1 \
+    --moe-backend marlin \
+    --language-model-only \
+    --reasoning-parser qwen3 \
+    --tool-call-parser qwen3_coder \
+    --enable-auto-tool-choice \
+    --max-num-seqs 6 \
+    --max-model-len 98304 \
+    --gpu-memory-utilization 0.82 \
+    --kv-cache-dtype fp8 \
+    --enable-prefix-caching \
+    --quantization compressed-tensors \
+    --safetensors-load-strategy prefetch \
+    --scheduling-policy priority \
+    --performance-mode throughput \
+    --override-generation-config '{"temperature": 0.85, "top_p": 0.95, "top_k": 20, "presence_penalty": 1.1}' \
+    --port 8001
+# Restart=always, NOT on-failure: vLLM's APIServer exits CLEANLY (rc=0) when the
+# EngineCore dies (e.g. CUDA OOM from a stray worker context), so on-failure
+# never fires and every OOM death strands :8001 down until a manual start.
+# StartLimitIntervalSec=0 (in [Unit]) = retry forever; a boot that can't
+# allocate VRAM just fails and retries 45s later until the intruders vacate.
+Restart=always
+RestartSec=45
+TimeoutStopSec=30
+KillMode=mixed
+
+[Install]
+WantedBy=default.target

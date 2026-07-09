@@ -1,0 +1,4 @@
+name: prometheus-prompt-policy
+version: 1.0.0
+description: "Runtime patch of the memory-policy prompts (de-fork of the prometheus-fork prompt rewrites): MEMORY_GUIDANCE and _MEMORY_REVIEW_PROMPT replaced with the system-facts-only fork texts, and the memory-scope guardrail spliced into _COMBINED_REVIEW_PROMPT (a path the fork itself missed). Sentinel-guarded: on upstream drift it fails open, keeps base behavior, and writes $HERMES_HOME/PATCH_FAILED_prometheus-prompt-policy."
+author: "prometheus fork"

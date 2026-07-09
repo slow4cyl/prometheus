@@ -1,0 +1,60 @@
+diff --git a/tools/checkpoint_manager.py b/tools/checkpoint_manager.py
+index f256ec7c3..2e5502eda 100644
+--- a/tools/checkpoint_manager.py
++++ b/tools/checkpoint_manager.py
+@@ -1112,7 +1112,12 @@ class CheckpointManager:
+             store, working_dir,
+         )
+         _run_git(
+-            ["gc", "--prune=now", "--quiet"],
++            # grace-window prune, NOT now: ~20 concurrent sessions write this store;
++            # prune=now deletes objects a mid-gc ref still needs, and the resulting
++            # dangling ref aborts every later gc with rc=128 (2026-07-03:
++            # refs/hermes/e9afff2c... -> missing object, store uncollected until
++            # hand-repaired). A window keeps just-written objects safe.
++            ["gc", "--prune=2.hours.ago", "--quiet"],
+             store, working_dir, timeout=_GIT_TIMEOUT * 3,
+         )
+         _repair_bare_repo_dirs(store)
+@@ -1200,7 +1205,12 @@ class CheckpointManager:
+             store, str(store.parent),
+         )
+         _run_git(
+-            ["gc", "--prune=now", "--quiet"],
++            # grace-window prune, NOT now: ~20 concurrent sessions write this store;
++            # prune=now deletes objects a mid-gc ref still needs, and the resulting
++            # dangling ref aborts every later gc with rc=128 (2026-07-03:
++            # refs/hermes/e9afff2c... -> missing object, store uncollected until
++            # hand-repaired). A window keeps just-written objects safe.
++            ["gc", "--prune=2.hours.ago", "--quiet"],
+             store, str(store.parent), timeout=_GIT_TIMEOUT * 3,
+         )
+         _repair_bare_repo_dirs(store)
+@@ -1412,7 +1422,12 @@ def prune_checkpoints(
+             store, str(base),
+         )
+         _run_git(
+-            ["gc", "--prune=now", "--quiet"],
++            # grace-window prune, NOT now: ~20 concurrent sessions write this store;
++            # prune=now deletes objects a mid-gc ref still needs, and the resulting
++            # dangling ref aborts every later gc with rc=128 (2026-07-03:
++            # refs/hermes/e9afff2c... -> missing object, store uncollected until
++            # hand-repaired). A window keeps just-written objects safe.
++            ["gc", "--prune=2.hours.ago", "--quiet"],
+             store, str(base), timeout=_GIT_TIMEOUT * 3,
+         )
+         _repair_bare_repo_dirs(store)
+@@ -1484,7 +1499,12 @@ def prune_checkpoints(
+                 store, str(base),
+             )
+             _run_git(
+-                ["gc", "--prune=now", "--quiet"],
++                # grace-window prune, NOT now: ~20 concurrent sessions write this store;
++            # prune=now deletes objects a mid-gc ref still needs, and the resulting
++            # dangling ref aborts every later gc with rc=128 (2026-07-03:
++            # refs/hermes/e9afff2c... -> missing object, store uncollected until
++            # hand-repaired). A window keeps just-written objects safe.
++            ["gc", "--prune=2.hours.ago", "--quiet"],
+                 store, str(base), timeout=_GIT_TIMEOUT * 3,
+             )
+             _repair_bare_repo_dirs(store)

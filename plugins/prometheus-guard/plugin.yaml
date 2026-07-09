@@ -1,0 +1,6 @@
+name: prometheus-guard
+version: 1.0.0
+description: "Reject bogus kanban_block calls from fleet workers before they commit: tool-hallucination claims ('no terminal / only kanban tools') verified against the runtime toolset, and uncertainty-deferrals ('awaiting human review') when results are already written or the task body contains the exact command to run. Port of the prometheus-fork in-file guard (tools/kanban_tools.py, fork commit e6004d504) so it survives base updates with zero rebase surface."
+author: "prometheus fork"
+hooks:
+  - pre_tool_call

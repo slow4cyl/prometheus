@@ -1,0 +1,59 @@
+# Zombie Re-dispatch + Batch Creation Interaction
+
+## Problem
+
+When the Director kills zombie processes (completed tasks with lingering OS processes), the kanban scheduler may re-dispatch the same tasks on the next tick. If the Director also creates new tasks (via batch creator or manually) in the same pass, the re-dispatched zombies and new tasks compete for the same workers, causing duplicate work.
+
+## Observed in Cycle #259
+
+1. Director killed 11 zombie processes (tasks already done in kanban)
+2. Director ran batch_create_tasks.py → created 4 tasks
+3. Director manually created 10 tasks
+4. Scheduler re-dispatched the 10 killed zombies → 10 workers now had 2 tasks each
+5. Total: 29 alive processes for 19 unique tasks
+
+### Timeline:
+```
+T+0:  Kill 11 zombies (tasks already done in kanban)
+T+1:  Batch creator runs → 4 tasks created (uses stale kanban count)
+T+2:  Manual creation → 10 tasks created
+T+3:  Scheduler tick → re-dispatches 10 killed zombies
+T+4:  29 processes alive, 10 workers with duplicates
+```
+
+## Fix
+
+### Option A: Reclaim before killing
+Instead of killing zombie processes directly, reclaim the tasks first:
+```bash
+hermes kanban reclaim <task_id>  # Changes status from running → ready
+kill <PID>                        # Then kill the process
+```
+Reclaiming removes the task from the scheduler's dispatch queue, preventing re-dispatch.
+
+### Option B: Block after kill
+After killing zombies, immediately block them to prevent re-dispatch:
+```bash
+kill <PID>
+hermes kanban block <task_id> "zombie cleaned — process killed"
+```
+
+## Detection
+
+After a Director pass that kills zombies AND creates tasks, check for workers with multiple tasks:
+```bash
+ps aux | grep 'kanban task' | grep -v grep | grep -oE 'prometheus-(worker|synthesis)-[0-9]+|kanban task (t_[a-f0-9]+)'
+```
+If any worker appears with 2+ task IDs, duplicates exist.
+
+## Prevention
+
+**Best practice:** When the Director needs to both clean up zombies AND create new tasks:
+1. Reclaim zombies FIRST (hermes kanban reclaim)
+2. Kill processes SECOND
+3. Wait for scheduler tick
+4. THEN create new tasks
+
+This ensures the scheduler has processed the reclaims before new tasks are created.
+
+Alternative: Use `hermes kanban block` instead of `kill` for zombies — blocking prevents re-dispatch without requiring process kill.

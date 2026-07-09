@@ -1,0 +1,76 @@
+From 8a227adfa91fea8abd88470c066fb0c222e4d2ce Mon Sep 17 00:00:00 2001
+From: Prometheus Local <prometheus@localhost>
+Date: Wed, 8 Jul 2026 19:53:51 -0500
+Subject: [PATCH] test: stop 5 config.set tests writing the REAL
+ ~/.hermes/config.yaml
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+test_config_set_model_{requires_confirmation_for_expensive_model,
+explicit_provider_skips_broken_default_init,does_not_leak_inference_provider_env,
+records_per_session_override_not_env,switches_agent_without_touching_env}
+exercised the full config.set flow with switch_model mocked but let
+_persist_model_switch call the real cli.save_config_value — which resolves
+the config path from cli._hermes_home captured at import. Run without
+HERMES_HOME (any plain 'pytest tests/'), they clobber the live user config:
+last writer left model.default=anthropic/claude-sonnet-4.6 +
+base_url=https://api.anthropic.com, silently repointing every fleet worker
+at an Anthropic endpoint (observed live 2026-07-08 16:38; ~2000 worker
+deaths on non-retryable 400s until restored).
+
+Mock cli.save_config_value in all five, same as
+test_config_set_model_global_persists already does.
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
+---
+ tests/test_tui_gateway_server.py | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/tests/test_tui_gateway_server.py b/tests/test_tui_gateway_server.py
+index 7c9667e61..652199449 100644
+--- a/tests/test_tui_gateway_server.py
++++ b/tests/test_tui_gateway_server.py
+@@ -3337,6 +3337,7 @@ def test_config_set_model_requires_confirmation_for_expensive_model(monkeypatch)
+         "hermes_cli.model_switch.switch_model", lambda **_kwargs: result
+     )
+     monkeypatch.setattr(server, "_restart_slash_worker", lambda sid, session: None)
++    monkeypatch.setattr("cli.save_config_value", lambda *_a, **_k: True)
+     monkeypatch.setattr(server, "_emit", lambda *args, **kwargs: None)
+ 
+     resp = server.handle_request(
+@@ -3436,6 +3437,7 @@ def test_config_set_model_explicit_provider_skips_broken_default_init(monkeypatc
+     monkeypatch.setattr(server, "_wait_agent", lambda *_args: seen.__setitem__("wait", seen["wait"] + 1))
+     monkeypatch.setattr(server, "_emit", lambda *args, **kwargs: None)
+     monkeypatch.setattr(server, "_restart_slash_worker", lambda *args, **kwargs: None)
++    monkeypatch.setattr("cli.save_config_value", lambda *_a, **_k: True)
+ 
+     def fake_runtime_provider(*, requested=None, target_model=None, **_kwargs):
+         seen["requested"].append((requested, target_model))
+@@ -3551,6 +3553,7 @@ def test_config_set_model_does_not_leak_inference_provider_env(monkeypatch):
+         "hermes_cli.model_switch.switch_model", lambda **_kwargs: result
+     )
+     monkeypatch.setattr(server, "_restart_slash_worker", lambda sid, session: None)
++    monkeypatch.setattr("cli.save_config_value", lambda *_a, **_k: True)
+     monkeypatch.setattr(server, "_emit", lambda *args, **kwargs: None)
+ 
+     try:
+@@ -3612,6 +3615,7 @@ def test_config_set_model_records_per_session_override_not_env(monkeypatch):
+         "hermes_cli.model_switch.switch_model", lambda **_kwargs: result
+     )
+     monkeypatch.setattr(server, "_restart_slash_worker", lambda sid, session: None)
++    monkeypatch.setattr("cli.save_config_value", lambda *_a, **_k: True)
+     monkeypatch.setattr(server, "_emit", lambda *args, **kwargs: None)
+ 
+     try:
+@@ -3694,6 +3698,7 @@ def test_config_set_model_switches_agent_without_touching_env(monkeypatch):
+     monkeypatch.delenv("HERMES_MODEL", raising=False)
+     monkeypatch.delenv("HERMES_INFERENCE_MODEL", raising=False)
+     monkeypatch.setattr(server, "_restart_slash_worker", lambda sid, session: None)
++    monkeypatch.setattr("cli.save_config_value", lambda *_a, **_k: True)
+     monkeypatch.setattr(server, "_emit", lambda *args, **kwargs: None)
+ 
+     def fake_switch_model(**kwargs):
+-- 
+2.54.0
+
