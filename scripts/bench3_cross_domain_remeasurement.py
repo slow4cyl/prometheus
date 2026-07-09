@@ -17,13 +17,14 @@ Usage:
 """
 
 import fcntl
+from prometheus_paths import PROMETHEUS_DB as _PP_PROMETHEUS_DB
 import json
 import os
 import sqlite3
 import sys
 import time
 
-DB_PATH = os.path.expanduser("~/.hermes/prometheus.db")
+DB_PATH = _PP_PROMETHEUS_DB
 STATUS_PATH = os.path.expanduser("~/.hermes/bench3_cross_domain_status.json")
 LOCK_PATH = os.path.expanduser("~/.hermes/bench3_cross_domain.lock")
 GAP_THRESHOLD = 5.0  # percentage points

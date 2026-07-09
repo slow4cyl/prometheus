@@ -17,10 +17,11 @@ prometheus.db experiments, and never returns a value below a persisted
 high-water mark. Monotonic and stable regardless of table churn.
 """
 import os
+from prometheus_paths import HERMES_HOME as _PP_HERMES_HOME
 import re
 import sqlite3
 
-HERMES = os.path.expanduser("~/.hermes")
+HERMES = _PP_HERMES_HOME
 KANBAN_DB = os.path.join(HERMES, "kanban.db")
 PROM_DB = os.path.join(HERMES, "prometheus.db")
 HIGHWATER = os.path.join(HERMES, ".exp_id_highwater")

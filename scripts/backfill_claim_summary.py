@@ -5,6 +5,7 @@ question that prompted them.
 
 Why (2026-07-04): a claim's headline (`hypothesis_text`) is copied verbatim
 from `experiments.hypothesis`, which is the *question* the experiment was set
+from prometheus_paths import PROMETHEUS_DB as _PP_PROMETHEUS_DB
 to answer ("Does X break?"). The `claim_summary` field — which every display
 prefers when present — was populated in 13 of 67,609 claims. The actual finding
 lives in `claim_evidence.key_finding` ("CONFIRMED: X holds, delta=4.6692…") and
@@ -36,9 +37,7 @@ import sqlite3
 import textwrap
 import time
 
-DB = os.path.expanduser('~/.hermes/prometheus.db')
-
-# key_findings that are system/janitor noise, not scientific conclusions
+DB = _PP_PROMETHEUS_DB
 _JUNK_PREFIX = ('JANITOR:', 'AUTO-', 'SKIP', 'MOOT', 'TIMEOUT', 'ERROR',
                 'No worker results', 'Report exists', 'Synthesized ')
 # worker verdict prefixes — a real conclusion almost always starts with one

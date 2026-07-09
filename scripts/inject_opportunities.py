@@ -1,4 +1,5 @@
 from db_retry import get_db
+from prometheus_paths import HERMES_HOME as _PP_HERMES_HOME
 from transfer_convergence import is_pair_contested
 #!/usr/bin/env python3
 """Inject high-opportunity edges into the curiosity queue (self_state.json AND prometheus.db).
@@ -17,7 +18,7 @@ Queue-state feedback (2026-06-19 stability fix):
 """
 import json, os, time, sys, sqlite3
 
-HERMES = os.path.expanduser("~/.hermes")
+HERMES = _PP_HERMES_HOME
 SELF_STATE = os.path.join(HERMES, "self_state.json")
 OUTCOME_CACHE = os.path.join(HERMES, "routing_outcome_cache.json")
 DB_PATH = os.path.join(HERMES, "prometheus.db")

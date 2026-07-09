@@ -15,11 +15,12 @@ All cron scripts should use this instead of raw sqlite3.connect() to avoid
 "database is locked" errors under concurrent access from 50 workers + 30 cron jobs.
 """
 import sqlite3
+from prometheus_paths import KANBAN_DB as _PP_KANBAN_DB, PROMETHEUS_DB as _PP_PROMETHEUS_DB
 import time
 import os
 
-PROMETHEUS_DB = os.path.expanduser("~/.hermes/prometheus.db")
-KANBAN_DB = os.path.expanduser("~/.hermes/kanban.db")
+PROMETHEUS_DB = _PP_PROMETHEUS_DB
+KANBAN_DB = _PP_KANBAN_DB
 RAG_DB = os.path.expanduser("~/.hermes/rag/rag.db")
 
 # Contention tuning (2026-07-02). The old values (busy_timeout=800ms, ~1.5s of

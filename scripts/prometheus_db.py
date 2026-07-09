@@ -3,6 +3,7 @@ Prometheus State Database v2 — SQLite-backed state management.
 Fixed for 20+ concurrent workers: context manager pattern, busy timeout, WAL mode.
 """
 import sqlite3
+from prometheus_paths import HERMES_HOME as _PP_HERMES_HOME
 import json
 import os
 import subprocess
@@ -18,8 +19,7 @@ from contextlib import contextmanager
 # a pre-migration schema — 2026-07-08: intake + task-janitor crash-looped on it,
 # "no such column: kanban_task_id" / "no such table: heartbeats"). expanduser makes
 # the resolution location-proof no matter where a copy of this file runs from.
-_HERMES_MAIN = os.path.expanduser("~/.hermes")
-
+_HERMES_MAIN = _PP_HERMES_HOME
 DB_PATH = os.path.join(_HERMES_MAIN, "prometheus.db")
 DB_LOCK = DB_PATH + ".lock"
 
@@ -86,157 +86,30 @@ def execute_db(sql, params=()):
         conn.execute(sql, params)
 
 def init_db():
-    """Initialize database schema."""
+    """Initialize database schema from the canonical schema file.
+
+    Single source of truth: schema/prometheus.schema.sql (65+ tables). The
+    old embedded 17-table bootstrap script created a half-schema database
+    that looked initialized but broke every lane added since — it has been
+    removed. If the schema file cannot be found, fail loudly rather than
+    silently bootstrapping a stale subset.
+    """
+    import os
+    candidates = [
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "schema", "prometheus.schema.sql"),
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "prometheus.schema.sql"),
+        os.path.join(os.environ.get("HERMES_HOME", os.path.expanduser("~/.hermes")), "schema", "prometheus.schema.sql"),
+    ]
+    schema_path = next((c for c in candidates if os.path.exists(c)), None)
+    if schema_path is None:
+        raise FileNotFoundError(
+            "prometheus.schema.sql not found (looked in: %s). Refusing to "
+            "bootstrap a partial schema — see SETUP.md." % ", ".join(candidates))
+    with open(schema_path) as fh:
+        sql = fh.read()
     with get_db() as conn:
-        conn.executescript("""
-    CREATE TABLE IF NOT EXISTS system (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL,
-        updated_at REAL NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS cycles (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        started_at REAL NOT NULL,
-        completed_at REAL,
-        status TEXT DEFAULT 'running',
-        phase TEXT,
-        summary TEXT,
-        experiments_discovered INTEGER DEFAULT 0,
-        experiments_synthesized INTEGER DEFAULT 0
-    );
-    CREATE TABLE IF NOT EXISTS experiments (
-        id TEXT PRIMARY KEY,
-        cycle_id INTEGER REFERENCES cycles(id),
-        hypothesis TEXT,
-        result TEXT,
-        status TEXT DEFAULT 'pending',
-        confidence_change REAL DEFAULT 0,
-        tags TEXT,
-        domain TEXT,
-        model TEXT,
-        created_at REAL NOT NULL,
-        started_at REAL,
-        completed_at REAL,
-        workspace_path TEXT,
-        kanban_task_id TEXT
-    );
-    CREATE TABLE IF NOT EXISTS domains (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT UNIQUE NOT NULL,
-        confidence REAL DEFAULT 0.5,
-        created_at REAL NOT NULL,
-        updated_at REAL NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS subtopics (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        domain_id INTEGER REFERENCES domains(id),
-        topic TEXT NOT NULL,
-        source_experiment TEXT,
-        created_at REAL NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS gaps (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        domain_id INTEGER REFERENCES domains(id),
-        description TEXT NOT NULL,
-        status TEXT DEFAULT 'open',
-        closed_by_experiment TEXT,
-        created_at REAL NOT NULL,
-        closed_at REAL
-    );
-    CREATE TABLE IF NOT EXISTS curiosities (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        text TEXT NOT NULL,
-        priority INTEGER DEFAULT 5,
-        status TEXT DEFAULT 'active',
-        source_experiment TEXT,
-        resolved_by_experiment TEXT,
-        created_at REAL NOT NULL,
-        resolved_at REAL
-    );
-    CREATE TABLE IF NOT EXISTS skills (
-        name TEXT PRIMARY KEY,
-        category TEXT,
-        created_at REAL NOT NULL,
-        patched_at REAL,
-        version TEXT
-    );
-    CREATE TABLE IF NOT EXISTS self_mods (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        cycle_id INTEGER REFERENCES cycles(id),
-        type TEXT,
-        description TEXT,
-        created_at REAL NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS audit_log (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        timestamp REAL NOT NULL,
-        cycle_id INTEGER REFERENCES cycles(id),
-        entry_type TEXT,
-        content TEXT NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS metrics_history (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        timestamp REAL NOT NULL,
-        cycles_completed INTEGER,
-        experiments_run INTEGER,
-        experiments_completed INTEGER,
-        knowledge_gaps_closed INTEGER,
-        skills_created INTEGER,
-        self_modifications INTEGER,
-        cost_total REAL,
-        cache_hit_rate REAL
-    );
-    CREATE TABLE IF NOT EXISTS tasks (
-        id TEXT PRIMARY KEY,
-        title TEXT,
-        body TEXT,
-        status TEXT,
-        assignee TEXT,
-        priority INTEGER DEFAULT 0,
-        created_at REAL,
-        started_at REAL,
-        completed_at REAL,
-        result TEXT,
-        workspace_path TEXT
-    );
-    CREATE TABLE IF NOT EXISTS task_events (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        task_id TEXT REFERENCES tasks(id),
-        kind TEXT,
-        payload TEXT,
-        created_at REAL NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS capabilities (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        description TEXT NOT NULL,
-        source_experiment TEXT,
-        created_at REAL NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS constraints (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        description TEXT NOT NULL,
-        created_at REAL NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS goals (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        description TEXT NOT NULL,
-        status TEXT DEFAULT 'active',
-        created_at REAL NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS from_isaac (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        message TEXT NOT NULL,
-        created_at REAL NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_experiments_status ON experiments(status);
-    CREATE INDEX IF NOT EXISTS idx_experiments_domain ON experiments(domain);
-    CREATE INDEX IF NOT EXISTS idx_experiments_cycle ON experiments(cycle_id);
-    CREATE INDEX IF NOT EXISTS idx_cycles_status ON cycles(status);
-    CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
-    CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_log(timestamp);
-    CREATE INDEX IF NOT EXISTS idx_audit_type ON audit_log(entry_type);
-    """)
-    print(f"Database initialized at {DB_PATH}")
+        conn.executescript(sql)
+    print(f"Database initialized at {DB_PATH} from {schema_path}")
 
 # ── Helper functions (all use context manager — connections auto-close) ──
 

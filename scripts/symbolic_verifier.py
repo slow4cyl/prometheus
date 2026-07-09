@@ -52,6 +52,7 @@ Usage:
     ~/vllm-env/bin/python symbolic_verifier.py --apply   # + mpmath.identify
 """
 import argparse
+from prometheus_paths import PROMETHEUS_DB as _PP_PROMETHEUS_DB
 import ast
 import json
 import math
@@ -62,7 +63,7 @@ import subprocess
 import sys
 import time
 
-DB = os.path.expanduser('~/.hermes/prometheus.db')
+DB = _PP_PROMETHEUS_DB
 SCRIPTS = os.path.dirname(os.path.abspath(__file__))
 REPORT_DIR = os.path.expanduser('~/.hermes/artifacts/symbolic_verifier')
 ENQUEUER = os.path.join(SCRIPTS, 'adversarial_replication_enqueuer.py')

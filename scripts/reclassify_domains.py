@@ -17,6 +17,7 @@ Usage:
 """
 
 import argparse
+from prometheus_paths import PROMETHEUS_DB as _PP_PROMETHEUS_DB
 import json
 import os
 import sqlite3
@@ -27,7 +28,7 @@ from collections import Counter
 from typing import Dict, List, Optional, Tuple
 
 # ── Paths ──
-DB_PATH = os.path.expanduser("~/.hermes/prometheus.db")
+DB_PATH = _PP_PROMETHEUS_DB
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 LOG_PATH = os.path.expanduser("~/.hermes/classifier/reclassify_log.jsonl")
 

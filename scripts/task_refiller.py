@@ -11,6 +11,7 @@ This script has ZERO policy. It maintains depth. That's it.
 """
 
 import json
+from prometheus_paths import HERMES_HOME as _PP_HERMES_HOME
 import fcntl
 import math
 import os
@@ -85,7 +86,7 @@ def get_task_priority(item, lane):
 from datetime import datetime, timezone
 
 # Paths
-HERMES_HOME = os.path.expanduser("~/.hermes")
+HERMES_HOME = _PP_HERMES_HOME
 KANBAN_DB = os.path.join(HERMES_HOME, "kanban.db")
 SUMMARY_PATH = os.path.join(HERMES_HOME, "refiller_summary.json")
 SCRIPTS_DIR = os.path.join(HERMES_HOME, "scripts")

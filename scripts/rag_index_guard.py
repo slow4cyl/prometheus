@@ -14,9 +14,10 @@ busy, it indexes the missing experiment embeddings (reusing the live embedding
 server). A flock prevents overlapping runs. Stays SILENT when nothing to do.
 """
 import os, sys, time, fcntl, sqlite3, subprocess
+from prometheus_paths import HERMES_HOME as _PP_HERMES_HOME
 from db_retry import get_db
 
-HERMES = os.path.expanduser("~/.hermes")
+HERMES = _PP_HERMES_HOME
 PROM_DB = f"{HERMES}/prometheus.db"
 RAG_DB = f"{HERMES}/rag/rag.db"
 LOCK = f"{HERMES}/.rag_index_guard.lock"

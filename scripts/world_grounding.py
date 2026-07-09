@@ -49,6 +49,7 @@ Usage:
 """
 
 import argparse
+from prometheus_paths import KANBAN_DB as _PP_KANBAN_DB, PROMETHEUS_DB as _PP_PROMETHEUS_DB
 import json
 import os
 import re
@@ -59,8 +60,8 @@ import uuid
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-DB = os.path.expanduser("~/.hermes/prometheus.db")
-KANBAN = os.path.expanduser("~/.hermes/kanban.db")
+DB = _PP_PROMETHEUS_DB
+KANBAN = _PP_KANBAN_DB
 ARTIFACTS = os.path.expanduser("~/.hermes/artifacts")
 CALIB = os.path.expanduser("~/.hermes/world_calibration.json")
 

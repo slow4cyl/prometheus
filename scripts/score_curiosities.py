@@ -7,13 +7,14 @@ Only scores items that are unscored or stale (>30 min old).
 Flock prevents overlapping runs. Stays SILENT when nothing to do.
 """
 import os
+from prometheus_paths import HERMES_HOME as _PP_HERMES_HOME
 import sys
 import time
 import fcntl
 import sqlite3
 from db_retry import get_db
 
-HERMES = os.path.expanduser("~/.hermes")
+HERMES = _PP_HERMES_HOME
 SCRIPTS = os.path.join(HERMES, "scripts")
 DB_PATH = os.path.join(HERMES, "prometheus.db")
 LOCK = os.path.join(HERMES, ".score_curiosities.lock")

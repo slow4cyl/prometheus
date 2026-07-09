@@ -20,6 +20,7 @@ This version:
 """
 
 import json
+from prometheus_paths import HERMES_HOME as _PP_HERMES_HOME, KANBAN_DB as _PP_KANBAN_DB
 import os
 import sqlite3
 import subprocess
@@ -28,8 +29,8 @@ import time
 import uuid
 from db_retry import get_db
 
-KANBAN_DB = os.path.expanduser("~/.hermes/kanban.db")
-HERMES_HOME = os.path.expanduser("~/.hermes")
+KANBAN_DB = _PP_KANBAN_DB
+HERMES_HOME = _PP_HERMES_HOME
 SCRIPTS_DIR = os.path.join(HERMES_HOME, "scripts")
 
 MAX_READY = 5          # Don't create if this many synthesis tasks already ready+running

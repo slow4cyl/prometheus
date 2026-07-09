@@ -35,6 +35,7 @@ Usage:
     python3 cross_domain_disconfirmation_gate.py --apply --limit 5
 """
 import argparse
+from prometheus_paths import PROMETHEUS_DB as _PP_PROMETHEUS_DB
 import os
 import re
 import subprocess
@@ -42,7 +43,7 @@ import sqlite3
 import sys
 import time
 
-DB = os.path.expanduser('~/.hermes/prometheus.db')
+DB = _PP_PROMETHEUS_DB
 SCRIPTS = os.path.dirname(os.path.abspath(__file__))
 ENQUEUER = os.path.join(SCRIPTS, 'adversarial_replication_enqueuer.py')
 

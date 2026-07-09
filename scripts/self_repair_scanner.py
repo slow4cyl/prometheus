@@ -27,6 +27,7 @@ Usage:
 """
 
 import os
+from prometheus_paths import HERMES_HOME as _PP_HERMES_HOME
 import sys
 import json
 import re
@@ -42,7 +43,7 @@ from pathlib import Path
 Usage: python3 self_repair_scanner.py [options]
 """
 
-HERMES_HOME = os.path.expanduser("~/.hermes")
+HERMES_HOME = _PP_HERMES_HOME
 PROMETHEUS_DB = os.path.join(HERMES_HOME, "prometheus.db")
 SELF_STATE_PATH = os.path.join(HERMES_HOME, "self_state.json")
 SCRIPTS_DIR = os.path.join(HERMES_HOME, "scripts")

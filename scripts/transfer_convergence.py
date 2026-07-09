@@ -48,12 +48,13 @@ DESIGN NOTES
     pairs are never gated.
 """
 import os
+from prometheus_paths import HERMES_HOME as _PP_HERMES_HOME
 import re
 import time
 
 from db_retry import get_db
 
-HERMES = os.path.expanduser("~/.hermes")
+HERMES = _PP_HERMES_HOME
 DB_PATH = os.path.join(HERMES, "prometheus.db")
 
 # --- Thresholds (validated against live corpus 2026-06-26) ---

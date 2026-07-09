@@ -1,0 +1,75 @@
+"""Invariants for the maturity policy and confidence arithmetic."""
+import maturity
+from write_worker_result import clamp_confidence, calibrate_confidence
+
+
+def _base(**over):
+    kw = dict(wsc=0.0, refute_count=0, contradiction_count=0, n_retests=0,
+              n_formal_replications=0, spurious_agreement=0.0)
+    kw.update(over)
+    return maturity.compute_maturity(**kw)
+
+
+def test_disputed_takes_priority_over_everything():
+    t = maturity.MATURITY_THRESHOLDS["disputed_contradiction_min"]
+    res = _base(wsc=99.0, n_retests=50, n_formal_replications=10,
+                contradiction_count=t)
+    assert res.status == "DISPUTED"
+
+
+def test_below_disputed_threshold_is_not_disputed():
+    t = maturity.MATURITY_THRESHOLDS["disputed_contradiction_min"]
+    res = _base(contradiction_count=t - 1)
+    assert res.status != "DISPUTED"
+
+
+def test_zero_signal_claim_reaches_no_tier():
+    res = _base()
+    assert res.status in (None, "", "NONE") or res.status not in ("ESTABLISHED",)
+
+
+def test_result_is_always_explainable():
+    for res in (_base(), _base(wsc=10, n_retests=3)):
+        assert isinstance(res.passed_checks, list)
+        assert isinstance(res.failed_checks, list)
+        assert res.passed_checks or res.failed_checks
+
+
+def test_none_inputs_are_normalized_not_crashing():
+    res = maturity.compute_maturity(wsc=None, refute_count=None,
+                                    contradiction_count=None, n_retests=None,
+                                    n_formal_replications=None,
+                                    spurious_agreement=None)
+    assert res is not None
+
+
+# --- confidence -------------------------------------------------------------
+
+def test_clamp_confidence_ranges():
+    assert clamp_confidence(None) == 0.85          # documented default
+    assert clamp_confidence("garbage") == 0.85
+    assert clamp_confidence(-3) == 0.0
+    assert clamp_confidence(0.5) == 0.5
+    assert clamp_confidence(1.0) == 1.0
+    assert clamp_confidence(55) == 0.55            # percent-style input
+    assert clamp_confidence(100.0) == 1.0
+    assert 0.0 <= clamp_confidence(1e9) <= 1.0
+
+
+def test_calibrate_confidence_pins_the_audit_map():
+    # Bin values derived from the 15,583-finding audit; exact map is policy.
+    assert calibrate_confidence(0.50) == 0.7857
+    assert calibrate_confidence(0.00) == 0.5455
+    assert calibrate_confidence(1.00) == 0.9167
+
+
+def test_calibrate_confidence_interpolates_and_clamps_edges():
+    mid = calibrate_confidence(0.525)  # rounds to a half-bin between 0.50/0.55
+    assert 0.7857 - 1e-9 <= mid <= 0.8750 + 1e-9
+    assert calibrate_confidence(-5.0) == calibrate_confidence(-0.30)
+    assert calibrate_confidence(5.0) == calibrate_confidence(1.00)
+
+
+def test_calibration_never_reports_certainty():
+    for raw in (0.0, 0.35, 0.6, 0.85, 1.0):
+        assert 0.0 < calibrate_confidence(raw) < 1.0

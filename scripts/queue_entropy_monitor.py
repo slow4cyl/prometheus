@@ -18,6 +18,7 @@ Usage:
 """
 
 import argparse
+from prometheus_paths import PROMETHEUS_DB as _PP_PROMETHEUS_DB
 import json
 import math
 import os
@@ -38,7 +39,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from curiosity_scorer import classify_thread, load_state, is_already_in_queue
 
 SELF_STATE_PATH = os.path.expanduser("~/.hermes/self_state.json")
-PROMETHEUS_DB_PATH = os.path.expanduser("~/.hermes/prometheus.db")
+PROMETHEUS_DB_PATH = _PP_PROMETHEUS_DB
 ENTROPY_THRESHOLD = 2.0  # Below this = stagnation danger
 ENTROPY_TARGET = 3.0     # Target entropy for healthy queue
 

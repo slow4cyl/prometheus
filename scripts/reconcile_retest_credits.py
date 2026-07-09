@@ -32,6 +32,7 @@ Usage:
 Runs live (applies) by default, matching the enqueuer cron convention.
 """
 import argparse
+from prometheus_paths import KANBAN_DB as _PP_KANBAN_DB
 import os
 import re
 import sys
@@ -40,7 +41,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from db_retry import get_db
 
-KANBAN_DB = os.path.expanduser("~/.hermes/kanban.db")
+KANBAN_DB = _PP_KANBAN_DB
 TAG = "candidate_retest_reconciled"
 
 

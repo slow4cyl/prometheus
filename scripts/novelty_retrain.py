@@ -17,6 +17,7 @@ Usage:
 """
 
 import argparse
+from prometheus_paths import PROMETHEUS_DB as _PP_PROMETHEUS_DB
 import json
 import os
 import re
@@ -24,7 +25,7 @@ import sqlite3
 import sys
 import time
 
-DB_PATH = os.path.expanduser("~/.hermes/prometheus.db")
+DB_PATH = _PP_PROMETHEUS_DB
 LABELS_PATH = os.path.expanduser("~/.hermes/novelty_labels.json")
 MODEL_PATH = os.path.expanduser("~/.hermes/curiosity_scorer_model.json")
 LOCK_PATH = os.path.expanduser("~/.hermes/.novelty_retrain.lock")

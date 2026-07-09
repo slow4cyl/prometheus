@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Director Cycle — one-pass strategic oversight."""
 import json, os, sys, sqlite3, subprocess
+from prometheus_paths import KANBAN_DB as _PP_KANBAN_DB
 from datetime import datetime, timezone
 
-DB = os.path.expanduser("~/.hermes/kanban.db")
+DB = _PP_KANBAN_DB
 SELF_STATE = os.path.expanduser("~/.hermes/self_state.json")
 REFILLER_SUMMARY = os.path.expanduser("~/.hermes/refiller_summary.json")
 

@@ -16,13 +16,14 @@ Cron: every 2 minutes, no_agent=true. Output: status JSON + optional kanban task
 """
 
 import json
+from prometheus_paths import HERMES_HOME as _PP_HERMES_HOME
 import os
 import sys
 import time
 import uuid
 
 # Paths
-HERMES_HOME = os.path.expanduser("~/.hermes")
+HERMES_HOME = _PP_HERMES_HOME
 KANBAN_DB = os.path.join(HERMES_HOME, "kanban.db")
 SCRIPTS_DIR = os.path.join(HERMES_HOME, "scripts")
 STATUS_PATH = os.path.join(HERMES_HOME, "queue_composition_status.json")

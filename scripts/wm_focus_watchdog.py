@@ -5,13 +5,14 @@ Runs as a cron job every minute. Reads running tasks from kanban.db,
 picks the most recently heartbeated one, and sets it as WM focus.
 """
 import json
+from prometheus_paths import KANBAN_DB as _PP_KANBAN_DB
 import os
 import re
 import sqlite3
 import urllib.request
 import time
 
-KANBAN_DB = os.path.expanduser("~/.hermes/kanban.db")
+KANBAN_DB = _PP_KANBAN_DB
 WM_URL = "http://127.0.0.1:19876"
 
 

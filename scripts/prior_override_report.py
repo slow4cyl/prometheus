@@ -35,12 +35,13 @@ Usage:
   python3 prior_override_report.py [--days 30] [--json-only]
 """
 import argparse
+from prometheus_paths import PROMETHEUS_DB as _PP_PROMETHEUS_DB
 import json
 import os
 import sqlite3
 import time
 
-DB = os.path.expanduser("~/.hermes/prometheus.db")
+DB = _PP_PROMETHEUS_DB
 STATUS_PATH = os.path.expanduser("~/.hermes/prior_override_status.json")
 
 POS = ("SUPPORTED", "CONFIRMED", "SUPPORT", "TRUE", "YES")

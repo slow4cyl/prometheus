@@ -49,12 +49,13 @@ Betweenness is always recomputed from the (small) edge set — it's fast.
 """
 
 import collections
+from prometheus_paths import HERMES_HOME as _PP_HERMES_HOME
 import json
 import os
 import re
 from collections import defaultdict
 
-HERMES = os.path.expanduser("~/.hermes")
+HERMES = _PP_HERMES_HOME
 ROUTING_LOG = os.path.join(HERMES, "classifier", "routing_log.jsonl")
 RECLASSIFIED_LOG = os.path.join(HERMES, "classifier", "routing_log_reclassified.jsonl")
 CACHE_PATH = os.path.join(HERMES, "classifier", "topology_cache.json")

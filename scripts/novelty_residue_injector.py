@@ -32,11 +32,12 @@ Usage:
     python3 novelty_residue_injector.py --apply --limit 20
 """
 import argparse
+from prometheus_paths import PROMETHEUS_DB as _PP_PROMETHEUS_DB
 import os
 import sqlite3
 import time
 
-DB = os.path.expanduser('~/.hermes/prometheus.db')
+DB = _PP_PROMETHEUS_DB
 SOURCE_TAG = 'novelty_residue'
 INJECT_PRIORITY = 2          # match compression_synthesis's injected-question tier
 MIN_RESIDUE_CHARS = 40       # skip trivially short residues

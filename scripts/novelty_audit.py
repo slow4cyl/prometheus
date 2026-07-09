@@ -39,6 +39,7 @@ Usage:
   python3 novelty_audit.py --claim 63435 --force # re-audit one claim
 """
 import argparse
+from prometheus_paths import PROMETHEUS_DB as _PP_PROMETHEUS_DB
 import json
 import os
 import sqlite3
@@ -55,7 +56,7 @@ from _key_helper import get_key
 from empirical_fact_classifier import is_empirical_fact
 import scholar_search
 
-DB = os.path.expanduser("~/.hermes/prometheus.db")
+DB = _PP_PROMETHEUS_DB
 API = "https://openrouter.ai/api/v1/chat/completions"
 MODEL = "deepseek/deepseek-v4-flash"
 # The FINDER is the burden-flip: a DIFFERENT family from both the audit model

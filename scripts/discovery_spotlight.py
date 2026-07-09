@@ -36,6 +36,7 @@ Usage:
     python3 discovery_spotlight.py --apply --limit 8   # score ledger + enqueue hardening
 """
 import argparse
+from prometheus_paths import PROMETHEUS_DB as _PP_PROMETHEUS_DB
 import json
 import math
 import os
@@ -48,7 +49,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import discovery_routing as routing
 
-DB = os.path.expanduser('~/.hermes/prometheus.db')
+DB = _PP_PROMETHEUS_DB
 SCRIPTS = os.path.dirname(os.path.abspath(__file__))
 ENQUEUER = os.path.join(SCRIPTS, 'adversarial_replication_enqueuer.py')
 JSON_PATH = os.path.expanduser('~/.hermes/discovery_candidates.json')

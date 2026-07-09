@@ -172,8 +172,12 @@ systemd/            service units (gateway, dashboard, local model, router)
 schema/             prometheus.db schema (empty-database bootstrap)
 skills/             kanban-worker + prometheus-* skills workers load per task
 dashboard/          single-file live dashboard (fleet, lanes, alerts)
+tests/              invariant tests (HERMES_HOME-isolated): domain policy,
+                    maturity, confidence arithmetic, world-basis classifier,
+                    schema bootstrap — `HERMES_HOME=$(mktemp -d) pytest tests/`
 fork-patches/       upstream PRs carried until merged (see its README)
 docs/               architecture-map.md — the full system reference
+REFACTORING.md      tracked structural debt (shrinking is the metric)
                     defork-plan.md — how the substrate was made update-proof
 SETUP.md            fresh-machine bootstrap guide
 ```

@@ -18,6 +18,7 @@ Output: ~/.hermes/docs/prometheus-discoveries.html (canonical) + ~/prometheus-di
 Usage:  python3 discovery_report.py            # build both outputs
 """
 import html
+from prometheus_paths import HERMES_HOME as _PP_HERMES_HOME
 import os
 import re
 import sqlite3
@@ -28,7 +29,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from mechanism_calibration import classify_mechanism
 import discovery_routing as routing
 
-HERMES = os.path.expanduser("~/.hermes")
+HERMES = _PP_HERMES_HOME
 DB = os.path.join(HERMES, "prometheus.db")
 CANONICAL = os.path.join(HERMES, "docs", "prometheus-discoveries.html")
 MIRROR = os.path.expanduser("~/prometheus-discoveries.html")

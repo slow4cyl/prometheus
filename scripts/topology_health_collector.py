@@ -12,6 +12,7 @@ topology from topology_common.py and the existing embedding cache.
 """
 
 import json
+from prometheus_paths import HERMES_HOME as _PP_HERMES_HOME
 import math
 import os
 import sqlite3
@@ -20,7 +21,7 @@ from db_retry import get_db
 import time
 from collections import defaultdict
 
-HERMES = os.path.expanduser("~/.hermes")
+HERMES = _PP_HERMES_HOME
 DB_PATH = os.path.join(HERMES, "prometheus.db")
 EMBEDDING_CACHE = os.path.join(HERMES, "domain_embeddings.json")
 EXPORT_PATH = os.path.join(HERMES, "topology_full_export.json")

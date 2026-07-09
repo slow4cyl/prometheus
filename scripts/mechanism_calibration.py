@@ -32,13 +32,14 @@ Usage:
     python3 mechanism_calibration.py --min-n 10
 """
 import argparse
+from prometheus_paths import PROMETHEUS_DB as _PP_PROMETHEUS_DB
 import json
 import os
 import re
 import sqlite3
 import time
 
-DB = os.path.expanduser("~/.hermes/prometheus.db")
+DB = _PP_PROMETHEUS_DB
 STATUS_PATH = os.path.expanduser("~/.hermes/mechanism_calibration.json")
 
 # Mechanism classes by finding SHAPE. First match wins, so order = priority:

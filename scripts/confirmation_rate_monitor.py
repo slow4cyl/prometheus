@@ -15,6 +15,7 @@ Usage:
 """
 
 import argparse
+from prometheus_paths import PROMETHEUS_DB as _PP_PROMETHEUS_DB
 import os
 import sqlite3
 import sys
@@ -26,7 +27,7 @@ Usage: python3 confirmation_rate_monitor.py [options]
 """
 
 
-DB_PATH = os.path.expanduser("~/.hermes/prometheus.db")
+DB_PATH = _PP_PROMETHEUS_DB
 TARGET_RATE = 0.60  # 55-65% target, 60% center
 ALERT_THRESHOLD = 0.70  # Above this = too conservative
 

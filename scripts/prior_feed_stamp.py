@@ -15,13 +15,14 @@ never blocks task creation. A dropped stamp degrades to 'unmeasurable', which th
 gate already handles.
 """
 import hashlib
+from prometheus_paths import PROMETHEUS_DB as _PP_PROMETHEUS_DB
 import json
 import os
 import re
 import sqlite3
 import time
 
-DB = os.path.expanduser("~/.hermes/prometheus.db")
+DB = _PP_PROMETHEUS_DB
 FEED_MARK = "CONFIRMED PRIOR FINDINGS"
 _FED_LINE = re.compile(r"^- \[[\d.]+\]\s*(.+)$", re.M)
 

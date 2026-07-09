@@ -44,6 +44,7 @@ Usage:
     python3 adversarial_replication_enqueuer.py --stats
 """
 import argparse
+from prometheus_paths import KANBAN_DB as _PP_KANBAN_DB
 import hashlib
 import json
 import os
@@ -59,7 +60,7 @@ from circularity_critic import find_archived_code
 
 SAFE_CREATE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                            "safe_kanban_create.py")
-KANBAN_DB = os.path.expanduser("~/.hermes/kanban.db")
+KANBAN_DB = _PP_KANBAN_DB
 MAX_PENDING = 16      # outstanding attacks (6 -> 16 for the retest-drain
                       # surge: the drain replicates ~60% of ~800 credits/day,
                       # so REPLICATED inflow is ~350-400/day while 6 slots at a

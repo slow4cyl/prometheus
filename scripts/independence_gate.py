@@ -55,14 +55,15 @@ Usage:
     python3 independence_gate.py --enqueue --limit 5   # clean-room lane (DELIBERATE)
 """
 import argparse
+from prometheus_paths import KANBAN_DB as _PP_KANBAN_DB, PROMETHEUS_DB as _PP_PROMETHEUS_DB
 import json
 import os
 import sqlite3
 import sys
 import time
 
-DB = os.path.expanduser("~/.hermes/prometheus.db")
-KANBAN = os.path.expanduser("~/.hermes/kanban.db")
+DB = _PP_PROMETHEUS_DB
+KANBAN = _PP_KANBAN_DB
 REPORT = os.path.expanduser("~/.hermes/independence_report.json")
 ARMED = os.path.expanduser("~/.hermes/independence_armed.json")
 ENQUEUER = os.path.join(os.path.dirname(os.path.abspath(__file__)),

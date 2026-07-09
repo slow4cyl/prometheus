@@ -13,6 +13,7 @@ Usage:
 """
 
 import json
+from prometheus_paths import HERMES_HOME as _PP_HERMES_HOME
 import os
 import sqlite3
 import time
@@ -21,7 +22,7 @@ import faiss
 from pathlib import Path
 from typing import List, Tuple
 
-HERMES = Path(os.environ.get("HERMES_HOME", os.path.expanduser("~/.hermes")))
+HERMES = Path(_PP_HERMES_HOME)
 MAIN_HERMES = Path(os.path.expanduser("~/.hermes"))
 RAG_DIR = HERMES / "rag"
 INDEX_PATH = RAG_DIR / "faiss_index.faiss"

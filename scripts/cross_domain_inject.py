@@ -22,6 +22,7 @@ Usage:
   python3 cross_domain_inject.py [--count N] [--dry-run]
 """
 import argparse
+from prometheus_paths import KANBAN_DB as _PP_KANBAN_DB, PROMETHEUS_DB as _PP_PROMETHEUS_DB
 import fcntl
 import json
 import os
@@ -30,8 +31,8 @@ import re
 import subprocess
 import sys
 
-PROM_DB = os.path.expanduser("~/.hermes/prometheus.db")
-KANBAN_DB = os.path.expanduser("~/.hermes/kanban.db")
+PROM_DB = _PP_PROMETHEUS_DB
+KANBAN_DB = _PP_KANBAN_DB
 SAFE_CREATE = os.path.expanduser("~/.hermes/scripts/safe_kanban_create.py")
 LOCK_PATH = os.path.expanduser("~/.hermes/cross_domain_inject.lock")
 import sqlite3

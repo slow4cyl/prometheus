@@ -19,6 +19,7 @@ Usage:
 """
 
 import argparse
+from prometheus_paths import PROMETHEUS_DB as _PP_PROMETHEUS_DB
 import os
 import re
 import sqlite3
@@ -32,9 +33,7 @@ Usage: python3 auto_classify_uncategorized.py [options]
 """
 
 
-DB_PATH = os.path.expanduser("~/.hermes/prometheus.db")
-
-# ─── Domain keyword sets ────────────────────────────────────────────────────
+DB_PATH = _PP_PROMETHEUS_DB
 # Derived from CANONICAL_MAPPINGS. Each domain maps to a list of keywords
 # that appear in hypothesis/result text for that domain.
 # Order matters: first match wins. More specific domains before general.

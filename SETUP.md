@@ -100,7 +100,17 @@ GPU sizing that survived contact with reality (reference deployment): vLLM
 — vLLM's API server exits rc=0 when the engine dies, so `on-failure` never
 fires.
 
-## 6. First-run sanity checklist
+## 6. Run the invariant tests
+
+```bash
+HERMES_HOME=$(mktemp -d) python -m pytest tests/ -q
+```
+24 tests pin the epistemic policy surface (domain normalization incl. the
+banned lossy mappings, maturity tiers, confidence calibration arithmetic,
+world-grounding basis classification, schema bootstrap). They never touch a
+live database — the conftest enforces isolation.
+
+## 7. First-run sanity checklist
 
 ```bash
 systemctl --user is-active hermes-gateway        # active

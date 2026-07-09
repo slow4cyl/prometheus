@@ -21,6 +21,7 @@ WAL-safe: busy_timeout, synchronous=NORMAL, chunked commits, BEGIN IMMEDIATE.
 Idempotent. Pass --apply to write; default is dry-run.
 """
 import argparse
+from prometheus_paths import PROMETHEUS_DB as _PP_PROMETHEUS_DB
 import json
 import os
 import shutil
@@ -32,7 +33,7 @@ from db_retry import get_db
 sys.path.insert(0, os.path.expanduser("~/.hermes/scripts"))
 from write_worker_result import verify_artifacts  # noqa: E402
 
-DB = os.path.expanduser("~/.hermes/prometheus.db")
+DB = _PP_PROMETHEUS_DB
 HERMES_HOME = os.environ.get("HERMES_HOME", os.path.expanduser("~/.hermes"))
 ARTIFACTS_ROOT = os.path.join(HERMES_HOME, "artifacts")
 WORKSPACES_ROOT = os.path.join(HERMES_HOME, "kanban", "workspaces")

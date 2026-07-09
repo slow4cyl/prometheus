@@ -20,6 +20,7 @@ This prevents lock contention with synthesis_merger.py (every 1m).
 """
 
 import json
+from prometheus_paths import PROMETHEUS_DB as _PP_PROMETHEUS_DB
 import os
 import sqlite3
 import sys
@@ -36,7 +37,7 @@ Part of the Prometheus research infrastructure.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from state_lock import load_state, save_state, state_write_lock
 
-DB_PATH = os.path.expanduser("~/.hermes/prometheus.db")
+DB_PATH = _PP_PROMETHEUS_DB
 STATE_PATH = os.path.expanduser("~/.hermes/self_state.json")
 
 

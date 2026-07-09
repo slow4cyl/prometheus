@@ -16,12 +16,13 @@ CRON JOB TEMPLATE: no_agent=true, every 5m, deliver=local
 """
 
 import json
+from prometheus_paths import PROMETHEUS_DB as _PP_PROMETHEUS_DB
 import os
 import sys
 import sqlite3
 import time
 
-PROMETHEUS_DB = os.path.expanduser("~/.hermes/prometheus.db")
+PROMETHEUS_DB = _PP_PROMETHEUS_DB
 ALERT_LOG = os.path.expanduser("~/.hermes/selfref_watchdog_alerts.log")
 STATE_FILE = os.path.expanduser("~/.hermes/selfref_watchdog_state.json")
 

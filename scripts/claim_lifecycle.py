@@ -24,6 +24,7 @@ Usage:
 """
 
 import argparse
+from prometheus_paths import PROMETHEUS_DB as _PP_PROMETHEUS_DB
 import json
 import os
 import re
@@ -33,9 +34,7 @@ import hashlib
 from collections import Counter
 from datetime import datetime
 
-DB_PATH = os.path.expanduser("~/.hermes/prometheus.db")
-
-# ── Status constants ──────────────────────────────────────────────────────────
+DB_PATH = _PP_PROMETHEUS_DB
 ACTIVE = "ACTIVE"           # support > 80%, 3+ tests
 CONDITIONAL = "CONDITIONAL" # support 50-80%
 CONTESTED = "CONTESTED"     # support < 50%

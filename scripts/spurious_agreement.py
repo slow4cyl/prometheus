@@ -1,4 +1,5 @@
 import os
+from prometheus_paths import PROMETHEUS_DB as _PP_PROMETHEUS_DB
 #!/usr/bin/env python3
 """spurious_agreement.py - per-claim "spurious agreement" score for Prometheus.
 
@@ -58,7 +59,7 @@ import sqlite3
 import sys
 import time
 
-DB = os.path.expanduser("~/.hermes/prometheus.db")
+DB = _PP_PROMETHEUS_DB
 CHUNK = 1000
 MIN_EVIDENCE = 2  # claims with <2 evidence rows can't disagree with themselves
 

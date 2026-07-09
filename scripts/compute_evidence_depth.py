@@ -29,13 +29,13 @@ Usage:
 """
 
 import sqlite3
+from prometheus_paths import PROMETHEUS_DB as _PP_PROMETHEUS_DB
 import os
 import time
 import argparse
 from db_retry import get_db
 
-DB = os.path.expanduser("~/.hermes/prometheus.db")
-
+DB = _PP_PROMETHEUS_DB
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--recent", action="store_true", help="Only compute for recent curiosities")

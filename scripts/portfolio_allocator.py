@@ -19,6 +19,7 @@ Usage:
 """
 
 import argparse
+from prometheus_paths import PROMETHEUS_DB as _PP_PROMETHEUS_DB
 import json
 import os
 import sqlite3
@@ -26,7 +27,7 @@ import sys
 import time
 from datetime import datetime, timezone
 
-DB_PATH = os.path.expanduser("~/.hermes/prometheus.db")
+DB_PATH = _PP_PROMETHEUS_DB
 STATE_PATH = os.path.expanduser("~/.hermes/portfolio_state.json")
 LOCK_PATH = os.path.expanduser("~/.hermes/.portfolio_allocator.lock")
 

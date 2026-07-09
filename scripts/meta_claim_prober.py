@@ -38,6 +38,7 @@ Usage:
     python3 meta_claim_prober.py --apply --limit 3
 """
 import argparse
+from prometheus_paths import PROMETHEUS_DB as _PP_PROMETHEUS_DB
 import json
 import os
 import random
@@ -47,7 +48,7 @@ import sqlite3
 import sys
 import time
 
-DB = os.path.expanduser('~/.hermes/prometheus.db')
+DB = _PP_PROMETHEUS_DB
 SCRIPTS = os.path.dirname(os.path.abspath(__file__))
 ENQUEUER = os.path.join(SCRIPTS, 'adversarial_replication_enqueuer.py')
 

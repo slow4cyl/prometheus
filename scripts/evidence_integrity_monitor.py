@@ -15,12 +15,13 @@ Writes a JSON status file; inspector reads it. Exits non-zero if any alert fires
 """
 
 import sqlite3
+from prometheus_paths import PROMETHEUS_DB as _PP_PROMETHEUS_DB
 import json
 import os
 import sys
 from datetime import datetime, timezone
 
-DB_PATH    = os.path.expanduser("~/.hermes/prometheus.db")
+DB_PATH = _PP_PROMETHEUS_DB
 STATE_PATH = os.path.expanduser("~/.hermes/evidence_integrity_state.json")
 REPORT_PATH = os.path.expanduser("~/.hermes/evidence_integrity_report.json")
 

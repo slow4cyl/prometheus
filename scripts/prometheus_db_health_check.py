@@ -16,10 +16,11 @@ Exit codes:
 Output is consumed by the cron agent for alerting.
 """
 import os
+from prometheus_paths import PROMETHEUS_DB as _PP_PROMETHEUS_DB
 import sqlite3
 import sys
 
-DB_PATH = os.path.expanduser("~/.hermes/prometheus.db")
+DB_PATH = _PP_PROMETHEUS_DB
 EXPECTED_TABLES = 21
 MIN_EXPERIMENTS = 1000
 MIN_FILE_SIZE = 1_000_000  # 1MB

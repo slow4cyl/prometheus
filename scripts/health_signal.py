@@ -13,6 +13,7 @@ Concerns addressed:
 """
 
 import json
+from prometheus_paths import KANBAN_DB as _PP_KANBAN_DB, PROMETHEUS_DB as _PP_PROMETHEUS_DB
 import os
 import sqlite3
 import time
@@ -23,8 +24,8 @@ Part of the Prometheus research infrastructure.
 """
 
 
-KANBAN_DB = os.path.expanduser("~/.hermes/kanban.db")
-PROMETHEUS_DB = os.path.expanduser("~/.hermes/prometheus.db")
+KANBAN_DB = _PP_KANBAN_DB
+PROMETHEUS_DB = _PP_PROMETHEUS_DB
 SELF_STATE = os.path.expanduser("~/.hermes/self_state.json")
 HEALTH_FILE = os.path.expanduser("~/.hermes/system_health.json")
 QUEUE_FLOW_FILE = os.path.expanduser("~/.hermes/queue_flow.json")

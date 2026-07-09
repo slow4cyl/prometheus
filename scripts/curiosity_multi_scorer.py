@@ -19,6 +19,7 @@ Usage:
 """
 
 import re
+from prometheus_paths import PROMETHEUS_DB as _PP_PROMETHEUS_DB
 import json
 import os
 import sys
@@ -27,7 +28,7 @@ import math
 import time
 from collections import Counter
 
-DB_PATH = os.path.expanduser("~/.hermes/prometheus.db")
+DB_PATH = _PP_PROMETHEUS_DB
 MODEL_PATH = os.path.expanduser("~/.hermes/curiosity_scorer_model.json")
 
 # Feature extraction (same as validator + curiosity_scorer)

@@ -10,6 +10,7 @@ Usage:
 """
 
 import sqlite3
+from prometheus_paths import KANBAN_DB as _PP_KANBAN_DB, PROMETHEUS_DB as _PP_PROMETHEUS_DB
 import os
 import re
 import sys
@@ -19,8 +20,8 @@ import fcntl
 import subprocess
 import db_retry
 
-DB_PATH = os.path.expanduser('~/.hermes/prometheus.db')
-KANBAN_DB = os.path.expanduser('~/.hermes/kanban.db')
+DB_PATH = _PP_PROMETHEUS_DB
+KANBAN_DB = _PP_KANBAN_DB
 LOCK_FILE = os.path.expanduser('~/.hermes/replication_tracker.lock')
 STATE_FILE = os.path.expanduser('~/.hermes/replication_state.json')
 

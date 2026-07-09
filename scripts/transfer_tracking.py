@@ -19,13 +19,12 @@ Usage:
 """
 
 import os
+from prometheus_paths import PROMETHEUS_DB as _PP_PROMETHEUS_DB
 import re
 import time
 from db_retry import get_db as retry_get_db
 
-DB_PATH = os.path.expanduser("~/.hermes/prometheus.db")
-
-
+DB_PATH = _PP_PROMETHEUS_DB
 def _get_conn():
     """Get a retry-enabled connection to prometheus.db."""
     return retry_get_db()

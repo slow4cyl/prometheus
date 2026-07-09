@@ -19,9 +19,10 @@ Format:
 """
 
 import os, json, time, sqlite3, sys
+from prometheus_paths import HERMES_HOME as _PP_HERMES_HOME
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-HERMES = os.path.expanduser("~/.hermes")  # Always use main hermes dir, not worker profiles
+HERMES = _PP_HERMES_HOME
 PROMETHEUS_DB = os.path.join(HERMES, "prometheus.db")
 CACHE_PATH = os.path.join(HERMES, "domain_health_cache.json")
 

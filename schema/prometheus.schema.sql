@@ -13,7 +13,7 @@ CREATE TABLE cycles (
         experiments_discovered INTEGER DEFAULT 0,
         experiments_synthesized INTEGER DEFAULT 0
     );
-CREATE TABLE sqlite_sequence(name,seq);
+-- (sqlite_sequence is SQLite-internal; created automatically by AUTOINCREMENT)
 CREATE TABLE experiments (
         id TEXT PRIMARY KEY,  -- exp_001, exp_002, etc.
         cycle_id INTEGER REFERENCES cycles(id),

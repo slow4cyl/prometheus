@@ -4,13 +4,14 @@ Task Janitor v2 — SQLite-backed postmortem for stuck/failed Kanban tasks.
 Uses prometheus.db for task state instead of parsing JSON.
 """
 import fcntl
+from prometheus_paths import HERMES_HOME as _PP_HERMES_HOME
 import json
 import os
 import re
 import sqlite3
 import subprocess
 import sys
-HERMES_HOME = os.path.expanduser("~/.hermes")
+HERMES_HOME = _PP_HERMES_HOME
 sys.path.insert(0, HERMES_HOME)
 import time
 from datetime import datetime, timezone

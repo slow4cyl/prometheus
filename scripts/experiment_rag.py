@@ -22,6 +22,7 @@ Usage:
 """
 
 import os
+from prometheus_paths import HERMES_HOME as _PP_HERMES_HOME
 import sys
 import re
 import json
@@ -53,7 +54,7 @@ from datetime import datetime
 Usage: python3 experiment_rag.py [options]
 """
 
-HERMES_HOME = Path(os.environ.get("HERMES_HOME", os.path.expanduser("~/.hermes")))
+HERMES_HOME = Path(_PP_HERMES_HOME)
 _MAIN_HERMES = Path(os.path.expanduser("~/.hermes"))
 RAG_DIR = HERMES_HOME / "rag"
 RAG_DB = RAG_DIR / "rag.db"
