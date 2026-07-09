@@ -87,43 +87,18 @@ _VERDICT_TO_TAG = {
 
 
 def normalize_domain(domain):
-    """Normalize a domain string to canonical form."""
-    if not domain:
-        return domain
-    d = domain.strip().lower()
-    d = re.sub(r'[\s\-/]+', '_', d)
-    d = re.sub(r'[^a-z0-9_]', '', d)
-    d = re.sub(r'_+', '_', d).strip('_')
-    if not d:
-        return domain
-    merges = {
-        'prompt_injection_detection': 'injection_detection',
-        'prompt_injection': 'injection_detection',
-        'security_injection_detection': 'injection_detection',
-        'security_injection': 'injection_detection',
-        'adversarial_detection': 'adversarial_ml',
-        'ml_safety': 'safety', 'ml_security': 'safety',
-        'tardigrade_biology': 'biology',
-        'ensemble': 'ensemble_methods', 'ensemble_learning': 'ensemble_methods',
-        'hallucination_detection': 'injection_detection',
-        'cross_pollination': 'cross_domain',
-        'synthesis': 'meta_analysis', 'meta': 'meta_analysis',
-        'meta_learning': 'meta_analysis', 'meta_cognition': 'meta_analysis',
-        'meta_research': 'meta_analysis',
-        'injection': 'injection_detection',
-        'defense': 'safety', 'attack': 'adversarial_ml',
-        'general': 'calibration',
-        'dispatch': 'dispatch_pipeline', 'dict': 'dict_methodology',
-        'rag': 'injection_detection', 'rag_dedup': 'injection_detection',
-        'rag_safety': 'injection_detection',
-        'embedding': 'embedding', 'embeddings': 'embedding',
-        'cross_lingual': 'nlp', 'rlhf': 'calibration',
-        'distillation': 'optimization',
-        'financial_fraud_detection': 'finance', 'financial_markets': 'finance',
-        'ai_safety': 'safety',
-        'nlp_injection': 'nlp', 'nlp_safety': 'nlp',
-    }
-    return merges.get(d, d)
+    """Normalize a domain string to canonical form.
+
+    Delegates to write_worker_result.normalize_domain — the single source of
+    truth. This module used to carry its own stale copy that still contained
+    the greedy/lossy mappings ('general'->'calibration', 'rlhf'->'calibration',
+    'rag*'->'injection_detection', 'defense'/'attack', 'synthesis'/'meta', ...)
+    removed there on 2026-06-08 as the ROOT CAUSE of domain mislabeling — so
+    the apply stage silently re-applied the exact merges the write stage
+    banned, fighting the embedding classifier. Do not re-inline a dict here.
+    """
+    from write_worker_result import normalize_domain as _canonical
+    return _canonical(domain)
 
 
 
