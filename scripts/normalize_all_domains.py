@@ -13,7 +13,8 @@ import sys
 from collections import Counter
 from db_retry import get_db
 
-DB_PATH = sys.argv[1] if len(sys.argv) > 1 else "/home/goose/.hermes/prometheus.db"
+from prometheus_paths import PROMETHEUS_DB
+DB_PATH = sys.argv[1] if len(sys.argv) > 1 else PROMETHEUS_DB
 
 # --- Semantic merge map: normalized_key -> canonical domain ---
 # These are cases where the "same" domain has conceptually different names
