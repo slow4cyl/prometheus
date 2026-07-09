@@ -64,6 +64,15 @@ found MONOTONIC-type claims were over-trusted at 67.6% and reweighted them.
 Contradicted claims are not deleted; they are routed to an attack lane and
 fought over.
 
+**It re-tests its simulations against the world.** The toy-vs-world lane
+(`world_grounding.py`) takes claims that were validated in self-generated or
+simulated settings and re-runs them against real external datasets. In the
+reference deployment, only **~71% of verified re-tests hold** (15/21) —
+roughly three in ten simulation-validated findings are refused by reality.
+Those refusals aren't buried; they're first-class results the lane records
+and the dashboard displays. Most autonomous-research systems never ask this
+question; the honest answer is the strongest argument for asking it.
+
 **Confidence is scoped, capped, and adversarially earned.** Claims carry a
 `claim_scopes` ledger. Attack cards target the *mapped scope*, not a
 strawman. A confirmation from a correlated source is worth less than one from
