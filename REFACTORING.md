@@ -86,9 +86,15 @@ fixed, which is why the rest of its list is taken seriously.)
 ## Open
 
 ### 1. Exception-handling triage
-414 `except Exception` / 33 bare `except` across the tree. Policy (do not
-blanket-remove — fail-open is deliberate in cron lanes):
+~477 `except Exception` across the tree (count grows with the codebase; it
+is a policy surface, not a burn-down target). Bare `except:` is DONE in
+scripts/ (all 24 converted to typed, with the liveness/ABANDON/commit paths
+narrowed so a swallowed KeyboardInterrupt can't read as "worker dead" or
+commit after an interrupt); 2 remain in `skills/kanban-worker/` reference
+material. Policy for the `except Exception` sites (do not blanket-remove —
+fail-open is deliberate in cron lanes):
 - failure expected → log a structured reason
 - failure invalidates evidence → mark the output unverified
 - failure operational-only → fail open, but emit a heartbeat/status line
-Apply the triage when touching a file; convert bare `except:` on sight.
+Apply the triage when touching a file; convert any new bare `except:` on
+sight.
