@@ -62,8 +62,8 @@ cron ticker, and plugin system this repo builds on. Install it first
       │                                              ┌─────────────┴─────────────┐
       │                                              ▼                           ▼
       │                                    local A1 workers            API-lane workers
-      │                                  (vLLM on RTX 5090,          (burst / frontier
-      │                                   free, 6×96K ctx)             capability)
+      │                                  (vLLM on RTX 5090,          (~14 concurrent slots,
+      │                                   free, 6×96K ctx)          incl. model-pinned lanes)
       │                                              └─────────────┬─────────────┘
       │                                                            ▼
       │                                            experiments (code preserved,
@@ -152,11 +152,14 @@ Two SQLite databases (WAL mode, ~20 concurrent writers):
 ## Hardware reference
 
 The reference deployment runs everything on **one machine**: a consumer
-workstation with a single RTX 5090 (32 GB). The local worker is a 30B-class
-MoE served by vLLM in FP4 (~1,400 tok/s, 6 concurrent 96K-token contexts) — so the
-bulk of fleet compute is **free and local**; metered API models are reserved
-for burst lanes. None of this is required: any OpenAI-compatible endpoint
-works as the worker lane (see `SETUP.md`).
+workstation with a single RTX 5090 (32 GB), running **local and API workers
+at the same time** as one ~20-slot pool. A router fills the local lane first —
+a 30B-class MoE served by vLLM in FP4 (~1,400 tok/s, 6 concurrent 96K-token
+contexts, free) — and everything past those 6 slots, plus the model-pinned
+adversarial/cross-family lanes, runs through metered API models in parallel
+(~14 slots). If the local endpoint is down, its share routes to the API too.
+None of this is required: any OpenAI-compatible endpoint works as the worker
+lane (see `SETUP.md`).
 
 ## Repository layout
 
