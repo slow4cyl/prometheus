@@ -371,10 +371,24 @@ def persist(scored):
             (s["claim_id"], s["independence_ratio"], s["n_sup"], s["n_stamped"], s["n_stamped_fed"],
              ",".join(s["all_families"]), 1 if s["single_family"] else 0,
              s["independence_multiplier"], now))
+    # Neutralize rows for claims that LEFT the promotion band: the ledger is
+    # otherwise a superset that keeps a demoted claim's last sub-1.0
+    # multiplier forever, and discovery_spotlight applies that stale discount
+    # (4 demoted claims were still being haircut). Families/ratio history
+    # stays; only the live multiplier resets.
+    if scored:
+        placeholders = ",".join("?" * len(scored))
+        neutralized = conn.execute(
+            f"UPDATE claim_independence SET independence_multiplier = 1.0, updated_at = ? "
+            f"WHERE independence_multiplier < 1.0 AND claim_id NOT IN ({placeholders})",
+            [now] + [s["claim_id"] for s in scored]).rowcount
+    else:
+        neutralized = 0
     conn.commit()
     conn.close()
     print(f"persisted claim_independence for {len(scored)} claims "
-          f"({sum(1 for s in scored if s['independence_multiplier']<1.0)} haircut)")
+          f"({sum(1 for s in scored if s['independence_multiplier']<1.0)} haircut"
+          + (f"; {neutralized} off-band rows neutralized" if neutralized else "") + ")")
 
 
 CLEAN_ROOM_MODEL = os.environ.get("HERMES_CLEANROOM_MODEL", "deepseek/deepseek-v4-flash")

@@ -38,6 +38,7 @@ print one line per problem and exit 1. Always writes
 ~/.hermes/db_reconciliation_report.json.
 """
 import json
+import os
 import re
 import sqlite3
 import sys
@@ -256,6 +257,33 @@ def main():
     info["text_timestamp_experiments"] = textts
     if textts:
         alerts.append(f"text_timestamps: {textts} experiments rows with ISO-text timestamps")
+
+    # --- 7. claim-fragment recurrence tripwire ----------------------------------
+    # normalize_hypothesis identity is fixed forward and the historical backlog
+    # was merged (merge_duplicate_claims.py), so duplicate hypothesis groups
+    # among non-MERGED claims must stay 0 forever. >0 = the identity chokepoint
+    # regressed or a writer is bypassing it; any future merge is a deliberate
+    # ledgered one-shot, never automatic (report-only by design).
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from claim_lifecycle import normalize_hypothesis
+        import hashlib
+        seen, dup_groups = {}, 0
+        for cid, hyp in p.execute(
+                "SELECT id, hypothesis_text FROM knowledge_claims "
+                "WHERE COALESCE(claim_status,'') != 'MERGED'"):
+            h = hashlib.sha256(normalize_hypothesis(hyp or "").encode()).hexdigest()[:16]
+            if h in seen:
+                dup_groups += 1 if seen[h] == 1 else 0
+                seen[h] += 1
+            else:
+                seen[h] = 1
+        info["fragment_dup_groups"] = dup_groups
+        if dup_groups:
+            alerts.append(f"fragment_dup_groups: {dup_groups} duplicate hypothesis groups "
+                          f"among non-MERGED claims (identity chokepoint regressed?)")
+    except Exception as e:
+        info["fragment_dup_groups"] = f"check_error: {e}"
 
     p.close(); k.close()
 

@@ -79,21 +79,39 @@ def _tier_rank(status) -> int:
     return 2 if status else 0  # any other non-null legacy tier > NULL
 
 
-def build_plan(conn) -> dict:
-    """Group live claims by recomputed hash; return {group_hash: plan} for
-    every group with >1 member. plan = {survivor, losers[], needs_rehash}."""
+def build_plan(conn) -> tuple[dict, list]:
+    """Group live claims by recomputed hash.
+
+    Returns (merge_plan, stale_singletons):
+    * merge_plan — {group_hash: {survivor, loser_ids, member_ids, needs_rehash}}
+      for every group with >1 member;
+    * stale_singletons — [(claim_id, old_hash, canonical_hash)] for claims that
+      are ALONE on their question but still carry a stale pre-fix claim_hash.
+      These are the fork seeds: the first retest of such a question computes
+      the canonical hash, finds no owner, and creates a duplicate claim (the
+      recurrence tripwire caught exactly this within hours of the merge).
+      Rehashing them to the (unowned) canonical hash closes the class. A
+      canonical hash owned by ANY other claim (incl. MERGED tombstones) is
+      never taken — UNIQUE(claim_hash) also hard-fails as the backstop.
+    """
     rows = conn.execute(
         "SELECT id, claim_hash, hypothesis_text, claim_status, "
         "(SELECT COUNT(*) FROM claim_evidence ce WHERE ce.claim_id = kc.id) AS ev_rows, "
         "created_at FROM knowledge_claims kc "
         "WHERE COALESCE(claim_status,'') != 'MERGED'"
     ).fetchall()
+    owned_hashes = {r[0] for r in conn.execute(
+        "SELECT claim_hash FROM knowledge_claims WHERE claim_hash IS NOT NULL")}
     groups: dict[str, list] = defaultdict(list)
     for r in rows:
         groups[_norm_hash(r["hypothesis_text"])].append(dict(r))
     plan = {}
+    singles = []
     for gh, members in groups.items():
         if len(members) < 2:
+            m = members[0]
+            if m["claim_hash"] != gh and gh not in owned_hashes:
+                singles.append((m["id"], m["claim_hash"], gh))
             continue
         for m in members:
             m["is_canonical"] = 1 if (m["claim_hash"] == gh) else 0
@@ -111,7 +129,49 @@ def build_plan(conn) -> dict:
             "member_ids": sorted(m["id"] for m in members),
             "needs_rehash": survivor["claim_hash"] != gh,
         }
-    return plan
+    return plan, singles
+
+
+def rehash_stale_singletons(conn, singles, *, ts, dry_run=True) -> dict:
+    """Carry each lone stale-hash claim to its canonical hash (ledgered).
+
+    CAS on the old hash so a concurrent writer can't be clobbered; a UNIQUE
+    race (another claim taking the canonical hash between plan and apply)
+    raises IntegrityError and that row is skipped and counted, never forced.
+    Batched short transactions per house write discipline.
+    """
+    stats = defaultdict(int)
+    if dry_run:
+        stats["rehash_singleton_planned"] = len(singles)
+        return dict(stats)
+    BATCH = 500
+    for i in range(0, len(singles), BATCH):
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            for cid, old_hash, canon in singles[i:i + BATCH]:
+                try:
+                    n = conn.execute(
+                        "UPDATE knowledge_claims SET claim_hash = ? "
+                        "WHERE id = ? AND claim_hash IS ?",
+                        (canon, cid, old_hash)).rowcount
+                except Exception:
+                    stats["rehash_singleton_skipped"] += 1
+                    continue
+                if n:
+                    _log(conn, ts, canon, "rehash_singleton",
+                         tbl="knowledge_claims", row_pk=cid,
+                         col="claim_hash", old=old_hash, new=canon)
+                    stats["rehash_singleton"] += 1
+                else:
+                    stats["rehash_singleton_skipped"] += 1
+            conn.execute("COMMIT")
+        except Exception:
+            try:
+                conn.execute("ROLLBACK")
+            except Exception:
+                pass
+            stats["rehash_singleton_batch_errors"] += 1
+    return dict(stats)
 
 
 def _ensure_schema(conn) -> None:
@@ -245,7 +305,7 @@ def rollback(conn, ts) -> dict:
                              (d.get("claim_status"), d.get("status"),
                               d.get("merged_into"), r["row_pk"]))
                 stats["tombstone_reversed"] += 1
-            elif act == "rehash_survivor":
+            elif act in ("rehash_survivor", "rehash_singleton"):
                 conn.execute("UPDATE knowledge_claims SET claim_hash=? WHERE id=?",
                              (r["old_value"], r["row_pk"]))
                 stats["rehash_reversed"] += 1
@@ -276,15 +336,18 @@ def main() -> int:
                 ap.error("--rollback requires --ts")
             print(json.dumps(rollback(conn, args.ts), indent=1))
             return 0
-        plan = build_plan(conn)
+        plan, singles = build_plan(conn)
         n_losers = sum(len(p["loser_ids"]) for p in plan.values())
         n_rehash = sum(1 for p in plan.values() if p["needs_rehash"])
         print(f"plan: {len(plan)} groups, {n_losers} losers to tombstone, "
-              f"{n_rehash} survivor rehashes")
+              f"{n_rehash} survivor rehashes, "
+              f"{len(singles)} stale singletons to rehash")
         if not args.apply:
             print("DRY-RUN — no writes. Re-run with --apply after a DB backup.")
             return 0
         stats = apply_plan(conn, plan, dry_run=False)
+        stats.update(rehash_stale_singletons(conn, singles,
+                                             ts=stats["migration_ts"], dry_run=False))
         print(json.dumps(stats, indent=1))
         print(f"undo: {UNDO_TABLE} (migration_ts={stats['migration_ts']}); "
               f"rollback: --rollback --ts {stats['migration_ts']}")

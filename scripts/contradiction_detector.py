@@ -26,14 +26,26 @@ from db_retry import get_db
 
 
 def detect_replication_contradictions(conn, dry_run=False):
-    """Path 1: Find disagreed replications and mark claims as DISPUTED."""
+    """Path 1: Find disagreed replications and mark claims as DISPUTED.
+
+    replication_results keys on EXPERIMENTS, so a fragment-merge (which
+    re-points claim-keyed provenance only) leaves disagreed rows attached to
+    MERGED tombstones' experiments. The join resolves those through
+    ``merged_into`` so the SURVIVOR inherits the disagreement — same
+    question, its replication disagreed — while the tombstone itself is
+    never re-statused (survivors are never MERGED; the merge verifies
+    no chains).
+    """
     disagreed = conn.execute("""
         SELECT rr.original_experiment_id, rr.validation_experiment_id,
                rr.original_finding, rr.validation_finding,
                kc.id as claim_id, kc.hypothesis_text, kc.claim_status
         FROM replication_results rr
-        JOIN knowledge_claims kc ON kc.first_experiment_id = rr.original_experiment_id
-                                 OR kc.last_experiment_id = rr.original_experiment_id
+        JOIN knowledge_claims kc0 ON kc0.first_experiment_id = rr.original_experiment_id
+                                  OR kc0.last_experiment_id = rr.original_experiment_id
+        JOIN knowledge_claims kc ON kc.id = CASE
+                 WHEN kc0.claim_status = 'MERGED' THEN kc0.merged_into
+                 ELSE kc0.id END
         WHERE rr.replication_status = 'disagreed'
           AND (kc.claim_status IS NULL OR kc.claim_status NOT IN ('DISPUTED', 'ESTABLISHED', 'MERGED'))
     """).fetchall()

@@ -156,16 +156,21 @@ def bridge_results(kconn, pconn):
             skipped += 1
             continue
         
-        exp_id = None
-        title_match = re.search(r'exp_(\w+)', title or '')
-        if title_match:
-            exp_id = f"exp_{title_match.group(1)}"
-        else:
+        def _extract_exp_id(text):
+            # A real experiment id always carries at least one digit
+            # (exp_17809…, exp_novel_followup_q8, exp_t_7df495d9). Prose words
+            # that start with exp_ ("exp_boundary conditions", "exp_results")
+            # never do — the old bare \w+ match minted those as ids.
+            for m in re.finditer(r'exp_(\w+)', text or ''):
+                if any(ch.isdigit() for ch in m.group(1)):
+                    return f"exp_{m.group(1)}"
+            return None
+
+        exp_id = _extract_exp_id(title)
+        if not exp_id:
             body_row = kconn.execute("SELECT body FROM tasks WHERE id = ?", (tid,)).fetchone()
             if body_row:
-                body_match = re.search(r'exp_(\w+)', body_row[0] or '')
-                if body_match:
-                    exp_id = f"exp_{body_match.group(1)}"
+                exp_id = _extract_exp_id(body_row[0])
         
         if not exp_id:
             exp_id = f"exp_bridge_{tid}"
