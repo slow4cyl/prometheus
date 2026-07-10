@@ -8,9 +8,10 @@ findings themselves; it's the **labels**: every entry states what kind of
 evidence backs it, and the failures are listed with the same prominence as
 the survivors.
 
-Scale at snapshot: **76,971 claims** extracted from **131,015 experiments**;
-**127** claims promoted to the discovery shelf; **54** world-grounding
-re-tests against external datasets.
+Scale at snapshot (refreshed 2026-07-10): **76,782 claims** (after collapsing
+1,316 duplicate hypothesis-fragments into their canonical claims) extracted
+from **132,991 experiments**; **127** claims promoted to the discovery shelf;
+**54** world-grounding re-tests against external datasets.
 
 ---
 
