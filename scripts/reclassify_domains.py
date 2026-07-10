@@ -449,6 +449,85 @@ def apply_reclassifications(conn, reclassifications, dry_run=False):
     return applied
 
 
+def heal_empty_domains(conn, canonical_domains, dry_run=False, embed_budget=40):
+    """Backfill rows left with an empty/NULL domain.
+
+    worker_results rows enter empty by design (result_bridge writes '' so
+    apply_worker_results can classify them); a stale sync-back left ~208 of
+    them stranded at '' even after the experiments row was classified. This is
+    the drain lane:
+
+    * pass 1 (free): copy the already-classified experiments.domain onto its
+      empty worker_results rows — no embedding, resolves the entire current
+      backlog since every empty's parent experiment carries a real domain;
+    * pass 2 (bounded): for a row whose parent domain is ALSO empty (and for
+      an empty experiments row, which has no parent), embed-classify from its
+      own text, spending at most ``embed_budget`` calls per run; rows that
+      still don't clear a canonical threshold are LEFT EMPTY (never
+      force-bucketed).
+
+    Every heal is appended to the reclassify JSONL ledger with a ``table``
+    marker so it is reversible (undo = set the logged row ids back to '').
+    Returns the list of applied heals.
+    """
+    healed = []  # (table, row_id, old_domain, new_domain, source, score)
+
+    # pass 1 — worker_results inherit their parent experiment's domain (free)
+    rows = conn.execute(
+        "SELECT w.id, e.domain AS exp_domain "
+        "FROM worker_results w JOIN experiments e ON e.id = w.experiment_id "
+        "WHERE (w.domain IS NULL OR TRIM(w.domain) = '') "
+        "AND e.domain IS NOT NULL AND TRIM(e.domain) != ''"
+    ).fetchall()
+    for r in rows:
+        new = (r["exp_domain"] or "").strip()
+        if new and new not in ("general", "unknown", "uncategorized") \
+                and not _is_malformed_concatenation(new):
+            healed.append(("worker_results", r["id"], "", new, "exp_copy", 1.0))
+
+    # pass 2 — bounded embedding for orphans with no usable parent domain
+    healed_wr_ids = {h[1] for h in healed if h[0] == "worker_results"}
+    leftover = conn.execute(
+        "SELECT w.id, w.key_finding, w.finding FROM worker_results w "
+        "LEFT JOIN experiments e ON e.id = w.experiment_id "
+        "WHERE (w.domain IS NULL OR TRIM(w.domain) = '') "
+        "AND (e.domain IS NULL OR TRIM(e.domain) = '')"
+    ).fetchall()
+    exp_empties = conn.execute(
+        "SELECT id, hypothesis, result FROM experiments "
+        "WHERE domain IS NULL OR TRIM(domain) = ''"
+    ).fetchall()
+    for tbl, r, txt in (
+        [("worker_results", row, (row["key_finding"] or row["finding"] or "")) for row in leftover]
+        + [("experiments", row, f"{row['hypothesis'] or ''} {row['result'] or ''}") for row in exp_empties]
+    ):
+        if r["id"] in healed_wr_ids or embed_budget <= 0 or not (txt or "").strip():
+            continue
+        embed_budget -= 1
+        cand, score, _, _ = classify_with_top2(txt[:300])
+        if cand in canonical_domains and score >= RECLASSIFY_THRESHOLD \
+                and not _is_malformed_concatenation(cand):
+            healed.append((tbl, r["id"], "", cand, "embedding", score))
+
+    if healed and not dry_run:
+        for tbl, row_id, _old, new, _src, _score in healed:
+            conn.execute(
+                f"UPDATE {tbl} SET domain = ? WHERE id = ? "
+                "AND (domain IS NULL OR TRIM(domain) = '')",
+                (new, row_id),
+            )
+        conn.commit()
+        os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
+        with open(LOG_PATH, "a") as f:
+            for tbl, row_id, old, new, src, score in healed:
+                f.write(json.dumps({
+                    "timestamp": time.time(), "table": tbl, "row_id": row_id,
+                    "old_domain": old, "new_domain": new,
+                    "source": src, "confidence": round(score, 4),
+                }) + "\n")
+    return healed
+
+
 def log_reclassification(reclassifications):
     """Log reclassifications to JSONL for auditing."""
     os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
@@ -507,6 +586,13 @@ def main():
         for domain, count in sorted(non_canonical.items(), key=lambda x: -x[1]):
             print(f"  {domain}: {count}")
     
+    # ── Step 0: Heal empty/NULL domains (worker_results + experiments) ──
+    print("\n[0/3] Healing empty-domain rows...")
+    healed = heal_empty_domains(conn, canonical_domains, args.dry_run)
+    print(f"  {'DRY RUN — would heal' if args.dry_run else 'Healed'} {len(healed)} empty-domain rows"
+          + (f" ({sum(1 for h in healed if h[4]=='exp_copy')} from parent, "
+             f"{sum(1 for h in healed if h[4]=='embedding')} by embedding)" if healed else ""))
+
     # ── Step 1: Find and reclassify orphan experiments ──
     print(f"\n[1/3] Finding orphan experiments (domains with <{args.min_domain_size} experiments)...")
     orphan_reclassifications, orphan_info = find_and_reclassify_orphans(

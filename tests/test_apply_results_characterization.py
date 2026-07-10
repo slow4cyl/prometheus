@@ -1316,10 +1316,10 @@ def test_lineage_live_cross_domain_and_transfer_completion(env, capsys):
 
 def test_junk_domain_embedding_stub_classification(env, capsys, monkeypatch):
     """An empty worker domain routes through classify_embedding (stubbed via
-    sys.modules — the real module would call the embed server). The
-    classified domain lands on the experiment/manifest, while
-    worker_results.domain is deliberately NOT synced (the sync only covers
-    the domain-creation-gate change, captured AFTER classification)."""
+    sys.modules — the real module would call the embed server). The classified
+    domain lands on the experiment/manifest AND is synced back onto the raw
+    worker_results row (the incoming-domain sync fix: an empty domain that gets
+    auto-classified no longer strands worker_results.domain at '')."""
     import types
 
     fake = types.ModuleType("embedding_domain_classifier")
@@ -1344,11 +1344,12 @@ def test_junk_domain_embedding_stub_classification(env, capsys, monkeypatch):
     assert applied == 1
     assert _rows(db, "SELECT domain FROM experiments") == [
         {"domain": "stub_target_domain"}]
-    # The raw worker row keeps its junk domain: the worker_results sync only
-    # fires when the domain-creation GATE changes the value, not the
-    # classifier (original_domain is captured after classification).
+    # The raw worker row is now synced to the classified domain: the sync
+    # fires for the empty->classified transition (domain != incoming_domain),
+    # not only the domain-creation-gate rename. Prevents the empty-domain
+    # backlog the heal lane otherwise has to drain.
     assert _rows(db, "SELECT domain FROM worker_results WHERE id = ?",
-                 (wr,)) == [{"domain": ""}]
+                 (wr,)) == [{"domain": "stub_target_domain"}]
     manifest = json.loads(
         (env["home"] / "artifacts" / "task-junk-1" / "manifest.json")
         .read_text())

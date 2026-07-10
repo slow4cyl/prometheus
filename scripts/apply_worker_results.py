@@ -689,6 +689,13 @@ def _stage_insert_experiment(ctx):
     exp_id = ctx.exp_id
     task_id = ctx.task_id
     domain = ctx.domain
+    # The value worker_results.domain still holds on entry (before any
+    # auto-classification below rewrites the local `domain`). Empty/junk
+    # incoming domains are classified into `domain` and written to the
+    # experiments row, but `original_domain` is captured AFTER that step —
+    # so without remembering the incoming value here, the empty→classified
+    # transition never syncs back and worker_results.domain stays '' forever.
+    incoming_domain = (str(ctx.domain).strip() if ctx.domain else "")
     hyp_to_store = ctx.hyp_to_store
     result_text = ctx.result_text
     experiment_type = ctx.experiment_type
@@ -764,18 +771,23 @@ def _stage_insert_experiment(ctx):
             except Exception as pass_err:
                 pass  # gate is advisory — don't block results
 
-            # Sync worker_results.domain to the gated value so
-            # malformed/duplicate domains don't persist there and
+            # Sync worker_results.domain to the resolved value so
+            # malformed/duplicate/empty domains don't persist there and
             # leak into the topology builder (which reads
-            # worker_results.domain directly).  Without this, the
-            # gate only fixes experiments.domain while the raw
-            # worker domain survives in worker_results forever.
-            if domain != original_domain:
+            # worker_results.domain directly).  Covers two drifts: the
+            # domain-gate rename (domain != original_domain) AND the
+            # auto-classification of an empty/junk incoming domain
+            # (domain != incoming_domain) — the latter is why 207 rows
+            # were stuck at '' (empty was classified into experiments but
+            # never propagated back to worker_results).
+            if domain and (domain != original_domain or domain != incoming_domain):
                 try:
                     conn.execute(
                         "UPDATE worker_results SET domain = ? "
-                        "WHERE experiment_id = ? AND domain = ?",
-                        (domain, exp_id, original_domain)
+                        "WHERE experiment_id = ? "
+                        "AND (domain = ? OR domain = ? OR domain IS NULL "
+                        "OR TRIM(domain) = '')",
+                        (domain, exp_id, original_domain, incoming_domain)
                     )
                 except Exception:
                     pass  # best-effort — don't block the apply
