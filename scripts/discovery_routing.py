@@ -137,11 +137,20 @@ _SIM_METHOD = re.compile(
 
 _NUM = re.compile(r"[-−]?\d+\.\d+")
 # labeled quantities: "r=-0.819", "R^2 = 0.73", "p<0.01", "beta_c = 0.13", "F1=0.66"
+# The leading lookbehind is load-bearing: without a word boundary the
+# single-letter labels bleed out of word ENDINGS — "gap=25.7pp" and "gap>0.05"
+# both read as p=…, which false-flagged the top two shelf cards (#60779
+# compared its real p=0.049 against a 25.7pp gap; #66039 compared a measured
+# gap=-0.025 against its own gap>0.05 bucketing threshold). The captured
+# operator and unit let the reader separate reported statistics from
+# thresholds and cross-unit lookalikes.
 _LABELED = re.compile(
+    r"(?<![A-Za-z0-9_])"
     r"(?P<label>R\^?2|R²|r|rho|ρ|p|F1|AUC|beta_?c?|β_?c?|alpha|α|tau|τ|d|eta2?|η2?|"
-    r"chi2|χ2|KS|MSE|RMSE|slope|threshold|t\*?|dt\*?)\s*[=:<>≈~]+\s*"
+    r"chi2|χ2|KS|MSE|RMSE|slope|threshold|t\*?|dt\*?)\s*(?P<op>[=:<>≈~≥≤]+)\s*"
     r"(?P<val>[-−]?\d+(?:\.\d+)?)"
-    r"(?:\s*(?:to|-|–|—)\s*(?P<val2>[-−]?\d+(?:\.\d+)?))?",
+    r"(?:\s*(?:to|-|–|—)\s*(?P<val2>[-−]?\d+(?:\.\d+)?))?"
+    r"(?P<unit>\s?(?:pp|%))?",
     re.I)
 
 # directional predicates: "underpredicts by 3.07x" / "overpredicts by 173%". A
@@ -280,6 +289,11 @@ def _labeled_quantities(text):
     unrelated numbers can't be mistaken for a disagreement. First mention wins."""
     out = {}
     for m in _LABELED.finditer(text or ""):
+        if any(c in m.group("op") for c in "<>≥≤"):
+            # A comparison operator binds a THRESHOLD/criterion ("gap>0.05",
+            # "holds for d<2.5", "requires p<0.05"), not a reported statistic —
+            # a point estimate must never be judged against a cutoff (#66039).
+            continue
         v1, v2s = m.group("val"), m.group("val2")
         # A LONE integer is an iteration count / horizon / parameter setting / bound
         # ("T=20000", "p>0"→0), not a reportable statistic — only a decimal or an
@@ -292,6 +306,10 @@ def _labeled_quantities(text):
         lab = {"r²": "r2", "χ2": "chi2", "η2": "eta2", "eta": "eta2",
                "βc": "betac", "β": "betac", "ρ": "rho", "α": "alpha",
                "τ": "tau", "t*": "t", "dt*": "dt"}.get(lab, lab)
+        if m.group("unit"):
+            # An explicit unit (pp/%) marks a different referent from a bare
+            # value under the same letter — units never cross-compare.
+            lab += "|" + m.group("unit").strip()
         lo = hi = float(v1.replace("−", "-"))
         if v2s:
             v2 = float(v2s.replace("−", "-"))
@@ -335,12 +353,17 @@ def central_quantity_drift(headline, residue, scope="", rel_tol=0.05):
     headline = _REFUTED_PRED.sub(" ", headline or "")
     residue = _REFUTED_PRED.sub(" ", residue or "")
     scope = _REFUTED_PRED.sub(" ", scope or "")
-    # Compare each labeled quantity across the three places a card reports it —
-    # finding, residue AND mapped scope — as intervals (overlap = agreement), so a
-    # p that reads 2-3 in the finding but 0.25 in the residue is caught (#65186);
-    # scope was previously never compared and ranges were dropped entirely.
-    srcs = [_labeled_quantities(headline), _labeled_quantities(residue),
-            _labeled_quantities(scope)]
+    # Compare each labeled quantity across finding and residue — the two texts
+    # that restate the card's CENTRAL result — as intervals (overlap =
+    # agreement), so a p that reads 2-3 in the finding but 0.25 in the residue
+    # is caught (#65186); ranges were previously dropped entirely. The mapped
+    # SCOPE is deliberately NOT in this pass: scope text reports statistics of
+    # the narrowed surviving regime, which differ from the headline by
+    # construction (#60779: headline classifier AUC=0.838 vs the boundary
+    # map's own AUC=0.6125 — same label, different model), and its threshold
+    # prose is criteria, not measurements (#66039). Scope still gets the
+    # refuted-span stripping above and remains available to callers.
+    srcs = [_labeled_quantities(headline), _labeled_quantities(residue)]
     worst = None
     for lab in set().union(*srcs):
         vals = [q[lab] for q in srcs if lab in q]
