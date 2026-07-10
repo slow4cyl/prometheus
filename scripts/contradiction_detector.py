@@ -116,6 +116,11 @@ def recompute_weighted_support(conn):
 
     Only counts evidence where the worker_result hypothesis_supported = 1
     (i.e., evidence that actually SUPPORTS the claim, not refutes or unknowns).
+
+    Consequence: a pure-refuted claim (evidence exists but none supports) gets
+    weighted_support_count=0 and so holds claim_status NULL permanently — that
+    is the designed refuted resting state, not an unscored backlog. See
+    maturity.py's module docstring (the ~10,344 evidence-bearing NULL claims).
     """
     conn.execute("""
         UPDATE knowledge_claims

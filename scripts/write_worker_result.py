@@ -369,6 +369,18 @@ def write_result(experiment_id, finding, supported=None, confidence=0.85,
     # Normalize domain to canonical form
     domain = normalize_domain(domain)
 
+    # Resolve model provenance when the caller didn't pass one. The CLI path
+    # (__main__) already does `args.model or resolve_model_provenance()`, but
+    # in-process callers that invoke this function with the default model=None
+    # bypassed it — so every default-model worker wrote model=NULL (~10% of
+    # results/hour, measured 2026-07-10). Mirror the dispatcher's precedence
+    # here (task override -> env -> profile config) so BOTH entry paths stamp.
+    if not model:
+        try:
+            model = resolve_model_provenance()
+        except Exception:
+            model = None
+
     predicted_str = json.dumps(predicted_direction) if predicted_direction else None
     observed_str = json.dumps(observed_direction) if observed_direction else None
     design_str = json.dumps(design_vector) if design_vector else None

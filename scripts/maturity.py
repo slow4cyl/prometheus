@@ -17,6 +17,18 @@ Design:
 
 Status history is written to claim_status_history on every status change.
 Legacy statuses (WELL_KNOWN, KNOWN, NOVEL, PARTIAL) are exempt from recompute.
+
+claim_status NULL is a COMPUTED resting tier, not a coverage gap: recompute
+runs over these every cycle (the selection includes claim_status IS NULL),
+but compute_maturity legitimately returns None at the candidate gate for any
+claim below candidate_wsc (0.5) — e.g. a claim whose only evidence is
+refuting (hypothesis_supported=0/NULL, so weighted_support_count=0) or whose
+sole support is FAILED-artifact (weight 0.3). Measured 2026-07-09: ~10,344
+evidence-bearing claims correctly hold NULL; 0/10,344 reach wsc 0.5 and 0
+carry a contradiction basis, so a "backfill" over them is a guaranteed no-op
+that only burns a write window. This is the designed refuted/weak resting
+state; do not add a stored REFUTED tier without redesigning the DISPUTED
+basis and the retest lanes.
 """
 
 import sys
