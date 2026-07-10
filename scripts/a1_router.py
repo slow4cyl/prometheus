@@ -22,7 +22,7 @@ from typing import Iterable
 
 A1_MODEL = "agents-a1"
 DEFAULT_BASE_URL = "http://localhost:8001/v1"
-DEFAULT_CAP = 8
+DEFAULT_CAP = 6  # matches the live FP4 serving shape (6x96K decode slots since the 2026-07-08 OOM reshape)
 DEFAULT_INTERVAL = 10.0
 
 DENY_TAGS = (
