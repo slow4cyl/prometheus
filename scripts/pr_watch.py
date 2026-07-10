@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-pr_watch.py — watch the 14 upstream PRs on NousResearch/hermes-agent (author slow4cyl).
+pr_watch.py — watch EVERY upstream PR by author slow4cyl on NousResearch/hermes-agent.
+
+The watch list is the live author query itself (no hardcoded numbers): new
+submissions are picked up on their first fetch and seeded silently.
 
 Cron monitor, silent-exit-0 convention:
   * nothing changed            -> no output, exit 0
@@ -24,10 +27,6 @@ except ImportError:  # standalone fallback, same contract as prometheus_paths
 
 REPO = "NousResearch/hermes-agent"
 AUTHOR = "slow4cyl"
-WATCHED = {
-    61221, 61222, 61224, 61225, 61226, 61227, 61228,
-    61229, 61230, 61231, 61232, 61233, 61234, 61235,
-}
 STATE_PATH = os.path.join(HERMES_HOME, ".pr_watch_state.json")
 GH_TIMEOUT = 60  # seconds
 
@@ -76,7 +75,7 @@ def snapshot(prs):
     """Reduce gh output to the fields we diff, keyed by PR number (as str)."""
     snap = {}
     for pr in prs:
-        if not isinstance(pr, dict) or pr.get("number") not in WATCHED:
+        if not isinstance(pr, dict) or pr.get("number") is None:
             continue
         decision = pr.get("reviewDecision") or ""
         if decision == "REVIEW_REQUIRED":  # default pre-review value, not a decision
@@ -155,10 +154,9 @@ def main():
 
     lines = diff(old, new)
 
-    # Keep last-known entries for watched PRs absent from this response so a
-    # transient gh omission doesn't wipe the baseline; drop unwatched keys.
-    watched_keys = {str(n) for n in WATCHED}
-    merged = {k: v for k, v in old.items() if k in watched_keys}
+    # Keep last-known entries for PRs absent from this response so a
+    # transient gh omission doesn't wipe the baseline.
+    merged = dict(old)
     merged.update(new)
     save_state(merged)
 
