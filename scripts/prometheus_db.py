@@ -341,10 +341,10 @@ def kill_worker_process(task_id):
                 try:
                     subprocess.run(["kill", "-9", pid], timeout=5)
                     killed += 1
-                except:
+                except Exception:
                     pass
         return killed > 0
-    except:
+    except (subprocess.SubprocessError, OSError, ValueError):
         return False
 
 def is_worker_alive(task_id):
@@ -356,7 +356,7 @@ def is_worker_alive(task_id):
             capture_output=True, text=True, timeout=5
         )
         return bool(result.stdout.strip())
-    except:
+    except (subprocess.SubprocessError, OSError, ValueError):
         return False
 
 def get_task_status(task_id):
@@ -370,7 +370,7 @@ def get_task_status(task_id):
         if result.returncode == 0 and result.stdout:
             import json
             return json.loads(result.stdout).get("task", {}).get("status", "?")
-    except:
+    except Exception:
         pass
     return "?"
 

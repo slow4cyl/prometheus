@@ -109,12 +109,12 @@ def main():
                             (new_depth, new_gen, r['id']))
                         updated += 1
                         errors -= 1
-                    except:
+                    except sqlite3.Error:
                         pass
 
     try:
         conn.commit()
-    except:
+    except sqlite3.OperationalError:
         time.sleep(2)
         conn.commit()
 

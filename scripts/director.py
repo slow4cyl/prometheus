@@ -41,7 +41,7 @@ def get_blocked_tasks():
                     (tid,)
                 ).fetchone()
                 reason = reason_row[0] if reason_row else "unknown"
-            except:
+            except Exception:
                 pass
         results.append((tid, title, assignee, reason))
     conn.close()
@@ -107,7 +107,7 @@ def main():
             ss = json.load(f)
         queue = ss.get("curiosity_queue", [])
         queue_size = len(queue)
-    except:
+    except Exception:
         queue_size = -1
 
     print(f"\n[Queue] {queue_size} items in curiosity queue")

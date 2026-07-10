@@ -177,7 +177,7 @@ def bridge_results(kconn, pconn):
                 meta = json.loads(metadata_json) if isinstance(metadata_json, str) else metadata_json
                 if "domain" in meta:
                     domain = meta["domain"]
-            except:
+            except (json.JSONDecodeError, TypeError):
                 pass
         
         try:

@@ -39,7 +39,7 @@ def is_worker_alive(task_id):
             if age > 300:  # 5 minutes — stale heartbeat = dead
                 return False
             return hb.get("status", "alive") == "alive"
-    except:
+    except Exception:
         pass
     # Fallback to OS check if no heartbeat recorded
     try:
@@ -49,7 +49,7 @@ def is_worker_alive(task_id):
             capture_output=True, text=True, timeout=5
         )
         return bool(result.stdout.strip())
-    except:
+    except (subprocess.SubprocessError, OSError):
         return False
 
 # Canonical main hermes dir — derived from script location to avoid HOME override issues
@@ -115,7 +115,7 @@ def analyze_workspace(task_id):
                 tmp_age = (time.time() - os.path.getmtime(tmp_path)) / 60
                 if tmp_age < 60:
                     tmp_outputs.append({"name": f, "age_min": round(tmp_age, 1)})
-    except:
+    except OSError:
         pass
     result_files = [f.name for f in files if f.name.endswith(".json") and ("result" in f.name.lower() or "summary" in f.name.lower())]
 
@@ -140,7 +140,7 @@ def count_reclaims(task_id):
                 (f"%{task_id}%",)
             ).fetchone()
             return row["n"]
-    except:
+    except sqlite3.Error:
         return 0
 
 
@@ -162,7 +162,7 @@ def count_blocked_events(task_id):
         ).fetchone()
         conn.close()
         return row[0] if row else 0
-    except:
+    except sqlite3.Error:
         return 0
 
 
@@ -263,7 +263,7 @@ def execute_decision(analysis):
             try:
                 with open(report_path) as f:
                     summary = f.read()[:2000]
-            except:
+            except OSError:
                 pass
         run_kanban(["complete", task_id, "--result", f"JANITOR: {reason}", "--summary", summary[:1000]])
         log_to_db(ts, task_id, decision, reason, "completed")
@@ -298,13 +298,13 @@ def log_to_db(ts, task_id, decision, reason, action):
                 "INSERT INTO audit_log (timestamp, entry_type, content) VALUES (?, 'JANITOR', ?)",
                 (ts_epoch, f"JANITOR: {task_id} — {decision}\n  REASON: {reason}\n  ACTION: {action}")
             )
-    except:
+    except Exception:
         pass
     # Also log to traditional audit log for backward compat
     try:
         with open(AUDIT_LOG, "a") as f:
             f.write(f"[{ts}] JANITOR: {task_id} — {decision}\n  REASON: {reason}\n  ACTION: {action}\n")
-    except:
+    except OSError:
         pass
 
 
@@ -481,7 +481,7 @@ def main():
         total_exp = conn.execute("SELECT COUNT(*) as n FROM experiments").fetchone()["n"]
         conn.close()
         print(f"\nDB: {total_exp} experiments, {unsynth} unsynthesized")
-    except:
+    except Exception:
         pass
 
 

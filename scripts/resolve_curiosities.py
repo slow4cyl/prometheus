@@ -95,7 +95,7 @@ def main():
             try:
                 cur_obj = json.loads(cur_text)
                 cur_text = cur_obj.get('text', cur_text)
-            except:
+            except (json.JSONDecodeError, TypeError):
                 pass
         cur_tokens = tokenize(cur_text)
         if not cur_tokens:

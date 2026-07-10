@@ -288,7 +288,7 @@ def main():
     finally:
         try:
             fcntl.flock(lock_fd, fcntl.LOCK_UN)
-        except: pass
+        except OSError: pass
         lock_fd.close()
 
 

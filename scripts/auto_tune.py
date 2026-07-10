@@ -29,8 +29,11 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from db_retry import get_db
+from prometheus_paths import HERMES_HOME as _HERMES_HOME
 
-HERMES = Path(os.path.expanduser("~/.hermes"))
+# Honor HERMES_HOME (was hardcoded ~/.hermes via $HOME, so the --dry-run gate
+# needed a fake $HOME; prometheus_paths resolves the env, making that obsolete).
+HERMES = Path(_HERMES_HOME)
 DB_PATH = HERMES / "prometheus.db"
 EXPORT_PATH = HERMES / "topology_full_export.json"
 OUTCOME_CACHE = HERMES / "routing_outcome_cache.json"

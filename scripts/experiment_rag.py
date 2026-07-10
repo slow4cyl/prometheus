@@ -591,7 +591,7 @@ def index_experiments(incremental: bool = True, reindex_failed: bool = False, fo
         try:
             with open(last_index_path) as f:
                 last_index_time = float(f.read().strip())
-        except:
+        except (OSError, ValueError):
             pass
 
     # Ultra-fast path: if directory mtime hasn't changed, skip entirely
@@ -609,13 +609,13 @@ def index_experiments(incremental: bool = True, reindex_failed: bool = False, fo
                     return 0
             with open(dir_mtime_path, 'w') as f:
                 f.write(str(dir_mtime))
-        except:
+        except Exception:
             pass
     elif os.path.exists(EXPERIMENTS_DIR):
         try:
             with open(dir_mtime_path, 'w') as f:
                 f.write(str(EXPERIMENTS_DIR.stat().st_mtime))
-        except:
+        except Exception:
             pass
 
     # Collect experiment files
@@ -737,7 +737,7 @@ def index_experiments(incremental: bool = True, reindex_failed: bool = False, fo
     try:
         with open(last_index_path, 'w') as f:
             f.write(str(time.time()))
-    except:
+    except OSError:
         pass
 
     return new_count
