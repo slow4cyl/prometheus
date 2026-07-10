@@ -1,8 +1,24 @@
 # torn-extend WAL invariant — why the obvious fix is wrong
 
-`hermes_cli/kanban_db.py:_check_file_length_invariant` currently silently
-returns in WAL mode. That is operationally safe but deletes a corruption
-tripwire, so it is not upstreamable as-is.
+> **RESOLVED 2026-07-09** — the robust form below is implemented in
+> prometheus-fork commit `abd8a024b` (`hermes_cli/kanban_db.py`):
+> re-stat backoff (~15ms, free when no deficit) → PASSIVE WAL drain
+> (heals the killed-mid-checkpoint case instead of alarming) → **two
+> bracketing full drains** with identical frame counters and an unmoved
+> header (any concurrent writer appends frames; a checkpointer moves the
+> header only by backfilling frames), and only then raise.
+> Validated with the same harness shape that falsified the ≤1-page patch
+> (`fork-patches/torn_extend_harness.py`): 4 writers × 25s, **258,904
+> commits, 0 false alarms** (old patch: 79 in 20s), 0.09% of checks
+> entered the re-stat path, one reached the drain (17.9ms max),
+> integrity_check ok, positive control (real truncation, empty WAL)
+> raises. Candidate for upstreaming as the reworked 0006 torn-extend
+> hunk. The analysis below is kept as the record of why the constant
+> tolerance was wrong.
+
+`hermes_cli/kanban_db.py:_check_file_length_invariant` previously silently
+returned in WAL mode. That was operationally safe but deleted a corruption
+tripwire, so it was not upstreamable as-is.
 
 ## The obvious fix is WRONG (adversarially disproven 2026-07-09)
 
@@ -40,5 +56,8 @@ Both need the race-reproduction harness the verifier built (LD_PRELOAD pwrite
 trace + a busy-board load generator) to validate. This is a live-DB corruption
 check — it gets its own focused session with that harness, not a batch item.
 
-Meanwhile the live behavior (silent-return-in-WAL) stays; patch 0006-hunk4 is
-NOT submitted upstream.
+That dedicated pass happened 2026-07-09 (see the RESOLVED banner at the top):
+form 1 shipped, hardened beyond the sketch with the healing drain + the
+double-drain stability proof, and validated against the rebuilt busy-board
+generator (`fork-patches/torn_extend_harness.py`). The old 0006-hunk4
+silent-return is gone; the reworked check is the upstream-PR candidate.
