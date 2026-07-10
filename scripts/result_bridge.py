@@ -20,6 +20,7 @@ write_worker_result.py. This catches the cases where they don't.
 import json
 import os
 import re
+import sqlite3
 import sys
 import time
 import fcntl
@@ -179,14 +180,32 @@ def bridge_results(kconn, pconn):
                     domain = meta["domain"]
             except (json.JSONDecodeError, TypeError):
                 pass
-        
+
+        # Model provenance: this row bypasses write_worker_result's resolver,
+        # so stamp it here from the task's override, else the fleet config
+        # default — otherwise every bridged row wrote model=NULL (the dominant
+        # source of the ~10%/hr provenance loss, measured 2026-07-10).
+        model = None
+        try:
+            ov = kconn.execute("SELECT model_override FROM tasks WHERE id = ?", (tid,)).fetchone()
+            if ov and ov[0] and str(ov[0]).strip():
+                model = str(ov[0]).strip()
+        except sqlite3.Error:
+            pass
+        if not model:
+            try:
+                from write_worker_result import _model_from_config
+                model = _model_from_config()
+            except Exception:
+                model = None
+
         try:
             pconn.execute("""
-                INSERT OR IGNORE INTO worker_results 
-                (experiment_id, kanban_task_id, hypothesis_supported, key_finding, 
-                 confidence, domain, created_at, applied, supported, finding)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
-            """, (exp_id, tid, supported, summary or "", cap_confidence(confidence), domain, now, supported, summary or ""))
+                INSERT OR IGNORE INTO worker_results
+                (experiment_id, kanban_task_id, hypothesis_supported, key_finding,
+                 confidence, domain, created_at, applied, supported, finding, model)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
+            """, (exp_id, tid, supported, summary or "", cap_confidence(confidence), domain, now, supported, summary or "", model))
             bridged += 1
         except Exception as e:
             print(f"  ERROR bridging {tid}: {e}")
