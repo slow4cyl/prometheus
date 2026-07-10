@@ -139,6 +139,7 @@ def recompute_weighted_support(conn):
             AND wr.hypothesis_supported = 1
             AND COALESCE(ce.evidence_type, 'support') != 'retracted_by_arbitration'
         ), 0.0)
+        WHERE COALESCE(claim_status,'') != 'MERGED'
     """)
 
 

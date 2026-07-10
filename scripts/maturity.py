@@ -85,7 +85,7 @@ MATURITY_THRESHOLDS = {
 
 # Legacy statuses that the recompute must NOT touch. These predate the
 # maturity system and carry semantics the recompute doesn't model.
-EXEMPT_STATUSES = {"WELL_KNOWN", "KNOWN", "NOVEL", "PARTIAL"}
+EXEMPT_STATUSES = {"WELL_KNOWN", "KNOWN", "NOVEL", "PARTIAL", "MERGED"}
 
 
 # ---------------------------------------------------------------------------
@@ -589,7 +589,7 @@ def recompute_all_maturity(conn, dry_run=False, verbose=False):
                     THEN 1 ELSE 0 END as world_refuted
         FROM knowledge_claims
         WHERE claim_status IS NULL
-           OR claim_status NOT IN ('WELL_KNOWN', 'KNOWN', 'NOVEL', 'PARTIAL')
+           OR claim_status NOT IN ('WELL_KNOWN', 'KNOWN', 'NOVEL', 'PARTIAL', 'MERGED')
     """).fetchall()
 
     transitions = {}  # {old_status: {new_status: count}}
