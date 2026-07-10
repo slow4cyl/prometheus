@@ -26,6 +26,7 @@ import sys
 import time
 from collections import defaultdict
 from pathlib import Path
+from types import SimpleNamespace
 
 from db_retry import get_db
 
@@ -391,125 +392,15 @@ def detect_ceiling_trap_pattern(adjustments):
     return ceiling_count >= 3
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Auto-tune outcome-aware routing")
-    parser.add_argument("--status", action="store_true")
-    parser.add_argument("--dry-run", action="store_true")
-    args = parser.parse_args()
-
-    state = load_tune_state()
-    r, n, _ = compute_calibration()
-    outcome_r, outcome_n = compute_outcome_aware_r()
-    hidden = count_hidden_bridges()
-    routing_collapsed, total_edges, zero_flow_edges = check_routing_collapse()
-    
-    now = time.time()
-    time_since_last = now - state.get("last_tune_time", 0)
-    freeze_until = state.get("freeze_until", 0)
-    is_frozen = now < freeze_until
-
-    print(f"{'='*60}")
-    print(f"AUTO-TUNE STATUS")
-    print(f"{'='*60}")
-    print(f"  Flow r:              {r:.4f} (baseline: ~0.03, target: {R_TARGET})")
-    print(f"  Outcome-aware r:     {outcome_r:.4f} (meaningful metric)")
-    print(f"  Flow samples:        {n}")
-    print(f"  Outcome samples:     {outcome_n}")
-    print(f"  Hidden bridges:      {hidden}")
-    collapse_str = f"YES ({zero_flow_edges}/{total_edges} zero flow)" if routing_collapsed else f"no ({zero_flow_edges}/{total_edges} zero flow)"
-    print(f"  Routing collapse:    {collapse_str}")
-    print(f"  Outcome bonus:       {state['outcome_bonus_weight']}")
-    print(f"  Injection rate:      {state['injection_rate']}")
-    print(f"  Novelty weight:      {state['novelty_weight']:.2f}")
-    print(f"  Trust weight:        {state.get('trust_weight', 0.15):.2f}")
-    print(f"  Last tune:           {time_since_last/60:.0f} min ago")
-    print(f"  Total adjustments:   {len(state.get('adjustments', []))}")
-    if is_frozen:
-        remaining = (freeze_until - now) / 60
-        print(f"  FROZEN:              outcome_bonus locked for {remaining:.0f} more min")
-
-    if args.status:
-        return
-
-    # Don't tune if not enough data (but allow emergency override for critical hidden bridges)
-    # Use outcome_n (meaningful samples) not flow_n (unreliable with few samples)
-    EMERGENCY_HIDDEN_BRIDGE_THRESHOLD = 3
-    STALE_TUNE_THRESHOLD = 1440  # 24 hours — force tune if last tune was this long ago
-    emergency_mode = False
-    stale_override = False
-    if outcome_n < MIN_RESULTS_FOR_TUNING and hidden >= EMERGENCY_HIDDEN_BRIDGE_THRESHOLD:
-        last_tune = state.get('last_tune_time', 0)
-        stale_minutes = (now - last_tune) / 60 if last_tune > 0 else 9999
-        if stale_minutes > STALE_TUNE_THRESHOLD:
-            print(f"\n  STALE TUNE OVERRIDE: {outcome_n}/{MIN_RESULTS_FOR_TUNING} outcome samples but last tune was {stale_minutes:.0f} min ago (>{STALE_TUNE_THRESHOLD} min)")
-            print(f"  Forcing tuning cycle despite low sample count — parameters stale.")
-            stale_override = True
-        else:
-            print(f"\n  NEED MORE DATA: {outcome_n}/{MIN_RESULTS_FOR_TUNING} outcome samples")
-            print(f"  Waiting for more results before tuning.")
-            return
-    elif outcome_n < MIN_RESULTS_FOR_TUNING and hidden < EMERGENCY_HIDDEN_BRIDGE_THRESHOLD:
-        print(f"\n  EMERGENCY OVERRIDE: {outcome_n}/{MIN_RESULTS_FOR_TUNING} outcome samples but hidden bridges critically low ({hidden} < {EMERGENCY_HIDDEN_BRIDGE_THRESHOLD})")
-        print(f"  Forcing tuning cycle despite low sample count.")
-        emergency_mode = True
-    elif hidden == 0:
-        # hidden=0 with flow_norm detection means all high-SR edges have traffic.
-        # This is the ideal state — no underrouted proven routes remain.
-        # Only trigger emergency if flow r is negative (routing struggling).
-        novelty_at_max = state.get("novelty_weight", 0.25) >= NOVELTY_WEIGHT_MAX
-        if r < 0:
-            # Flow r negative with hidden=0: OVER-EXPLORATION is the problem,
-            # not under-exploration. High novelty pushes routing toward unexplored
-            # edges that don't succeed, dragging flow r negative. Reduce novelty
-            # to let proven routes dominate.
-            print(f"\n  OVER-EXPLORATION OVERRIDE: hidden = 0, flow r = {r:.4f} < 0")
-            print(f"  Reducing novelty to let proven routes dominate routing.")
-            emergency_mode = True
-        else:
-            print(f"\n  HIDDEN BRIDGES = 0: All high-SR edges have traffic")
-            print(f"  No emergency needed — routing is well-discovered.")
-            # Still allow normal cooldown-respecting tuning
-            pass
-
-    # Crisis override: when hidden bridges are 5x+ target, bypass cooldown.
-    # At crisis levels, the system is stuck in a saturation loop and needs
-    # immediate consolidation pressure — waiting 5 more minutes worsens the problem.
-    crisis_mode = hidden >= HIDDEN_BRIDGE_CRISIS
-    manual_override_active = check_manual_override_cooldown(state, now)
-    if crisis_mode:
-        if manual_override_active:
-            print(f"\n  CRISIS OVERRIDE BLOCKED: manual override cooldown active")
-            print(f"  Respecting manual intervention — waiting for cooldown to expire")
-            crisis_mode = False  # Don't bypass cooldown when manual override is active
-        else:
-            print(f"\n  CRISIS OVERRIDE: hidden bridges {hidden} >= {HIDDEN_BRIDGE_CRISIS} (5x target={HIDDEN_BRIDGE_TARGET})")
-            print(f"  Bypassing cooldown for crisis consolidation.")
-
-    # Enforce minimum time between adjustments (skip cooldown for emergency/crisis mode)
-    if time_since_last < MIN_TIME_BETWEEN_ADJUSTMENTS and not args.dry_run and not emergency_mode and not crisis_mode:
-        wait = MIN_TIME_BETWEEN_ADJUSTMENTS - time_since_last
-        print(f"\n  COOLDOWN: Wait {wait/60:.1f} more min before next adjustment")
-        return
-    elif time_since_last < MIN_TIME_BETWEEN_ADJUSTMENTS and (emergency_mode or crisis_mode):
-        if emergency_mode:
-            print(f"\n  EMERGENCY: Bypassing cooldown for critical hidden bridges")
-        elif crisis_mode:
-            print(f"\n  CRISIS: Bypassing cooldown — hidden bridges at crisis level ({hidden} >= {HIDDEN_BRIDGE_CRISIS})")
-
-    adjustments = []
-
-    # Oscillation guard: check last 5 adjustments for ceiling trap patterns
-    ceiling_trap_detected = detect_ceiling_trap_pattern(state.get("adjustments", []))
-
-    # Apply freeze if ceiling trap oscillation detected
-    if ceiling_trap_detected and not is_frozen and not args.dry_run:
-        state["freeze_until"] = now + CEILING_TRAP_COOLDOWN
-        adjustments.append(f"FREEZE: 3+ ceiling traps in last 5 — locking outcome_bonus for 30 min")
-
-    # PRIMARY SIGNAL: outcome_r (correlates routing scores with success rates)
-    # SECONDARY SIGNAL: flow r (correlates traffic volume with success — structurally near zero)
-    # Outcome_r is the meaningful metric. Flow r is kept for backward compatibility
-    # and specific traffic-analysis edge cases.
+def _tune_outcome_bonus(ctx, args):
+    """Phase 1 — outcome_bonus."""
+    state = ctx.state
+    adjustments = ctx.adjustments
+    r = ctx.r
+    outcome_r = ctx.outcome_r
+    hidden = ctx.hidden
+    is_frozen = ctx.is_frozen
+    ceiling_trap_detected = ctx.ceiling_trap_detected
 
     # 1. Tune outcome_bonus based on outcome_r (PRIMARY — always runs)
     # CRISIS HARD CAP: When hidden bridges are 5x+ target, cap outcome_bonus at 40.
@@ -613,6 +504,19 @@ def main():
                     if not args.dry_run:
                         state["outcome_bonus_weight"] = new_weight
                         adjust_scorer_outcome_bonus(new_weight)
+
+
+def _tune_novelty(ctx, args):
+    """Phase 2 — novelty. Publishes to ctx: novelty, trust, current_inject,
+    extreme_high, hidden_growing, hidden_history, normal_crisis_stagnant."""
+    state = ctx.state
+    adjustments = ctx.adjustments
+    r = ctx.r
+    hidden = ctx.hidden
+    routing_collapsed = ctx.routing_collapsed
+    total_edges = ctx.total_edges
+    zero_flow_edges = ctx.zero_flow_edges
+    now = ctx.now
 
     # 2. Tune novelty based on hidden bridges
     # Read injection rate early — needed by crisis/stagnant logic below
@@ -1357,6 +1261,31 @@ def main():
         novelty = state["novelty_weight"]
         adjustments.append(f"Novelty hold: {novelty:.2f} (hidden={hidden} in healthy range [{HIDDEN_BRIDGE_MIN}-{HIDDEN_BRIDGE_TARGET}])")
 
+    ctx.novelty = novelty
+    ctx.trust = trust
+    ctx.current_inject = current_inject
+    ctx.extreme_high = extreme_high
+    ctx.hidden_growing = hidden_growing
+    ctx.hidden_history = hidden_history
+    ctx.normal_crisis_stagnant = normal_crisis_stagnant
+
+
+def _tune_injection_rate(ctx, args):
+    """Phase 3 — injection rate. Publishes to ctx: current_inject."""
+    state = ctx.state
+    adjustments = ctx.adjustments
+    r = ctx.r
+    outcome_r = ctx.outcome_r
+    hidden = ctx.hidden
+    routing_collapsed = ctx.routing_collapsed
+    total_edges = ctx.total_edges
+    zero_flow_edges = ctx.zero_flow_edges
+    now = ctx.now
+    extreme_high = ctx.extreme_high
+    hidden_growing = ctx.hidden_growing
+    hidden_history = ctx.hidden_history
+    normal_crisis_stagnant = ctx.normal_crisis_stagnant
+
     # 3. Adjust injection rate based on queue growth
     # Read from state file (authoritative source) instead of file content regex
     # The file has a default fallback of 5, but the actual rate comes from state
@@ -1826,6 +1755,25 @@ def main():
                     adjust_injection_rate(new_inject)
             else:
                 adjustments.append(f"Injection at ceiling: {current_inject} (hidden={hidden} {hidden/HIDDEN_BRIDGE_TARGET:.1f}x target, at max)")
+
+    ctx.current_inject = current_inject
+
+
+def _tune_trust_weight(ctx, args):
+    """Phase 4 — trust_weight. Publishes to ctx: trust."""
+    state = ctx.state
+    adjustments = ctx.adjustments
+    r = ctx.r
+    outcome_r = ctx.outcome_r
+    hidden = ctx.hidden
+    routing_collapsed = ctx.routing_collapsed
+    total_edges = ctx.total_edges
+    zero_flow_edges = ctx.zero_flow_edges
+    now = ctx.now
+    extreme_high = ctx.extreme_high
+    hidden_growing = ctx.hidden_growing
+    hidden_history = ctx.hidden_history
+    normal_crisis_stagnant = ctx.normal_crisis_stagnant
 
     # 4. Tune trust_weight based on hidden bridges and outcome-aware r
     trust = state.get("trust_weight", 0.15)
@@ -2424,6 +2372,18 @@ def main():
                 if not args.dry_run:
                     state["trust_weight"] = new_trust
 
+    ctx.trust = trust
+
+
+def _self_change_guard(ctx):
+    """Manual-override detection (self-change guard). Mutates state in place."""
+    state = ctx.state
+    adjustments = ctx.adjustments
+    now = ctx.now
+    novelty = ctx.novelty
+    trust = ctx.trust
+    current_inject = ctx.current_inject
+
     # Record manual override time if parameters changed significantly from last cycle
     # BUT ONLY if the change was NOT made by the auto-tune itself this cycle.
     # The auto-tune can push novelty/injection/trust by large amounts during
@@ -2451,6 +2411,151 @@ def main():
     state['_prev_novelty'] = novelty
     state['_prev_trust'] = trust
     state['_prev_injection'] = current_inject
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Auto-tune outcome-aware routing")
+    parser.add_argument("--status", action="store_true")
+    parser.add_argument("--dry-run", action="store_true")
+    args = parser.parse_args()
+
+    state = load_tune_state()
+    r, n, _ = compute_calibration()
+    outcome_r, outcome_n = compute_outcome_aware_r()
+    hidden = count_hidden_bridges()
+    routing_collapsed, total_edges, zero_flow_edges = check_routing_collapse()
+    
+    now = time.time()
+    time_since_last = now - state.get("last_tune_time", 0)
+    freeze_until = state.get("freeze_until", 0)
+    is_frozen = now < freeze_until
+
+    print(f"{'='*60}")
+    print(f"AUTO-TUNE STATUS")
+    print(f"{'='*60}")
+    print(f"  Flow r:              {r:.4f} (baseline: ~0.03, target: {R_TARGET})")
+    print(f"  Outcome-aware r:     {outcome_r:.4f} (meaningful metric)")
+    print(f"  Flow samples:        {n}")
+    print(f"  Outcome samples:     {outcome_n}")
+    print(f"  Hidden bridges:      {hidden}")
+    collapse_str = f"YES ({zero_flow_edges}/{total_edges} zero flow)" if routing_collapsed else f"no ({zero_flow_edges}/{total_edges} zero flow)"
+    print(f"  Routing collapse:    {collapse_str}")
+    print(f"  Outcome bonus:       {state['outcome_bonus_weight']}")
+    print(f"  Injection rate:      {state['injection_rate']}")
+    print(f"  Novelty weight:      {state['novelty_weight']:.2f}")
+    print(f"  Trust weight:        {state.get('trust_weight', 0.15):.2f}")
+    print(f"  Last tune:           {time_since_last/60:.0f} min ago")
+    print(f"  Total adjustments:   {len(state.get('adjustments', []))}")
+    if is_frozen:
+        remaining = (freeze_until - now) / 60
+        print(f"  FROZEN:              outcome_bonus locked for {remaining:.0f} more min")
+
+    if args.status:
+        return
+
+    # Don't tune if not enough data (but allow emergency override for critical hidden bridges)
+    # Use outcome_n (meaningful samples) not flow_n (unreliable with few samples)
+    EMERGENCY_HIDDEN_BRIDGE_THRESHOLD = 3
+    STALE_TUNE_THRESHOLD = 1440  # 24 hours — force tune if last tune was this long ago
+    emergency_mode = False
+    stale_override = False
+    if outcome_n < MIN_RESULTS_FOR_TUNING and hidden >= EMERGENCY_HIDDEN_BRIDGE_THRESHOLD:
+        last_tune = state.get('last_tune_time', 0)
+        stale_minutes = (now - last_tune) / 60 if last_tune > 0 else 9999
+        if stale_minutes > STALE_TUNE_THRESHOLD:
+            print(f"\n  STALE TUNE OVERRIDE: {outcome_n}/{MIN_RESULTS_FOR_TUNING} outcome samples but last tune was {stale_minutes:.0f} min ago (>{STALE_TUNE_THRESHOLD} min)")
+            print(f"  Forcing tuning cycle despite low sample count — parameters stale.")
+            stale_override = True
+        else:
+            print(f"\n  NEED MORE DATA: {outcome_n}/{MIN_RESULTS_FOR_TUNING} outcome samples")
+            print(f"  Waiting for more results before tuning.")
+            return
+    elif outcome_n < MIN_RESULTS_FOR_TUNING and hidden < EMERGENCY_HIDDEN_BRIDGE_THRESHOLD:
+        print(f"\n  EMERGENCY OVERRIDE: {outcome_n}/{MIN_RESULTS_FOR_TUNING} outcome samples but hidden bridges critically low ({hidden} < {EMERGENCY_HIDDEN_BRIDGE_THRESHOLD})")
+        print(f"  Forcing tuning cycle despite low sample count.")
+        emergency_mode = True
+    elif hidden == 0:
+        # hidden=0 with flow_norm detection means all high-SR edges have traffic.
+        # This is the ideal state — no underrouted proven routes remain.
+        # Only trigger emergency if flow r is negative (routing struggling).
+        novelty_at_max = state.get("novelty_weight", 0.25) >= NOVELTY_WEIGHT_MAX
+        if r < 0:
+            # Flow r negative with hidden=0: OVER-EXPLORATION is the problem,
+            # not under-exploration. High novelty pushes routing toward unexplored
+            # edges that don't succeed, dragging flow r negative. Reduce novelty
+            # to let proven routes dominate.
+            print(f"\n  OVER-EXPLORATION OVERRIDE: hidden = 0, flow r = {r:.4f} < 0")
+            print(f"  Reducing novelty to let proven routes dominate routing.")
+            emergency_mode = True
+        else:
+            print(f"\n  HIDDEN BRIDGES = 0: All high-SR edges have traffic")
+            print(f"  No emergency needed — routing is well-discovered.")
+            # Still allow normal cooldown-respecting tuning
+            pass
+
+    # Crisis override: when hidden bridges are 5x+ target, bypass cooldown.
+    # At crisis levels, the system is stuck in a saturation loop and needs
+    # immediate consolidation pressure — waiting 5 more minutes worsens the problem.
+    crisis_mode = hidden >= HIDDEN_BRIDGE_CRISIS
+    manual_override_active = check_manual_override_cooldown(state, now)
+    if crisis_mode:
+        if manual_override_active:
+            print(f"\n  CRISIS OVERRIDE BLOCKED: manual override cooldown active")
+            print(f"  Respecting manual intervention — waiting for cooldown to expire")
+            crisis_mode = False  # Don't bypass cooldown when manual override is active
+        else:
+            print(f"\n  CRISIS OVERRIDE: hidden bridges {hidden} >= {HIDDEN_BRIDGE_CRISIS} (5x target={HIDDEN_BRIDGE_TARGET})")
+            print(f"  Bypassing cooldown for crisis consolidation.")
+
+    # Enforce minimum time between adjustments (skip cooldown for emergency/crisis mode)
+    if time_since_last < MIN_TIME_BETWEEN_ADJUSTMENTS and not args.dry_run and not emergency_mode and not crisis_mode:
+        wait = MIN_TIME_BETWEEN_ADJUSTMENTS - time_since_last
+        print(f"\n  COOLDOWN: Wait {wait/60:.1f} more min before next adjustment")
+        return
+    elif time_since_last < MIN_TIME_BETWEEN_ADJUSTMENTS and (emergency_mode or crisis_mode):
+        if emergency_mode:
+            print(f"\n  EMERGENCY: Bypassing cooldown for critical hidden bridges")
+        elif crisis_mode:
+            print(f"\n  CRISIS: Bypassing cooldown — hidden bridges at crisis level ({hidden} >= {HIDDEN_BRIDGE_CRISIS})")
+
+    adjustments = []
+
+    # Oscillation guard: check last 5 adjustments for ceiling trap patterns
+    ceiling_trap_detected = detect_ceiling_trap_pattern(state.get("adjustments", []))
+
+    # Apply freeze if ceiling trap oscillation detected
+    if ceiling_trap_detected and not is_frozen and not args.dry_run:
+        state["freeze_until"] = now + CEILING_TRAP_COOLDOWN
+        adjustments.append(f"FREEZE: 3+ ceiling traps in last 5 — locking outcome_bonus for 30 min")
+
+    ctx = SimpleNamespace(
+        state=state,
+        adjustments=adjustments,
+        r=r,
+        outcome_r=outcome_r,
+        hidden=hidden,
+        routing_collapsed=routing_collapsed,
+        total_edges=total_edges,
+        zero_flow_edges=zero_flow_edges,
+        now=now,
+        is_frozen=is_frozen,
+        ceiling_trap_detected=ceiling_trap_detected,
+    )
+
+    # PRIMARY SIGNAL: outcome_r (correlates routing scores with success rates)
+    # SECONDARY SIGNAL: flow r (correlates traffic volume with success — structurally near zero)
+    # Outcome_r is the meaningful metric. Flow r is kept for backward compatibility
+    # and specific traffic-analysis edge cases.
+
+    _tune_outcome_bonus(ctx, args)
+
+    _tune_novelty(ctx, args)
+
+    _tune_injection_rate(ctx, args)
+
+    _tune_trust_weight(ctx, args)
+
+    _self_change_guard(ctx)
 
     # Report
     if adjustments:

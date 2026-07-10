@@ -26,8 +26,11 @@ fixed, which is why the rest of its list is taken seriously.)
 - **Config-drift + PR-watch sentinels** — on cron; the config sentinel guards
   the model-clobber class from this week's incident.
 - **torn-extend WAL fix** — the obvious ≤1-page tolerance was adversarially
-  disproven (see TORN_EXTEND_NOTES.md); deferred to a dedicated pass with the
-  robust re-stat-and-persist form. NOT shipped, NOT submitted.
+  disproven (see TORN_EXTEND_NOTES.md); the robust re-stat-and-persist form
+  (re-stat backoff → healing WAL drain → double-drain stability proof) is now
+  implemented and harness-validated (258,904 commits, 0 false alarms;
+  positive control raises). Shipped in prometheus-fork `abd8a024b`;
+  upstream-PR candidate.
 
 - **Domain normalization single-source** — `apply_worker_results` delegates
   to `write_worker_result.normalize_domain`; regression-pinned by
@@ -45,31 +48,37 @@ fixed, which is why the rest of its list is taken seriously.)
   classification, schema bootstrap, path policy. Run:
   `HERMES_HOME=$(mktemp -d) pytest tests/`.
 
+- **`auto_tune.py:main()` extracted** — 2,094 → 177-line orchestration; the
+  four numbered phases live in `_tune_outcome_bonus/_tune_novelty/
+  _tune_injection_rate/_tune_trust_weight` plus `_self_change_guard`, sharing
+  an explicit ctx (SimpleNamespace) threaded from AST-derived read/write sets;
+  bodies moved byte-verbatim. Gate held: `--dry-run` byte-identical old-vs-new
+  on the same DB snapshot (single wall-clock line scrubbed), plus a
+  definite-assignment sweep showing zero unresolved free names on any path.
+  Found along the way: auto_tune hardcodes `~/.hermes` via `$HOME` instead of
+  honoring HERMES_HOME — a path-centralization item (see below).
+- **`apply_worker_results.py:apply_results()` extracted** — 1,343 → 104-line
+  orchestration; `_ApplyContext` + 25 stage helpers, bodies verbatim by
+  construction (multiset line diff archived); the per-result `conn.commit()`
+  stays visibly in the orchestrator loop (write discipline unchanged).
+  Characterization EXTENDED first, against the monolith: 10 new golden-master
+  tests pinning previously-uncovered stages (adversarial routing, arbitration
+  seam, retest credit, boundary-lane closure, benchmark lineage — including
+  pinning the dead `parent_benchmark_id` propagation AS dead — throttle +
+  deep-lineage exemption, lineage_live, caveat confidence cap, PARTIALLY
+  REFUTED/REFUTED_SETUP verdicts, junk-domain classification). Suite 56 green.
+
 ## Open
 
-### 1. Extract `auto_tune.py:main()` (~2,100 lines)
-The four tuner phases have clean seams (search for the numbered comments):
-`1.` outcome_bonus (~line 515), `2.` novelty (~617), `3.` injection rate
-(~1360), `4.` trust_weight (~1830), plus the self-change guard (~2428).
-Method: AST-derive each block's read/write variable sets, extract into
-`_tune_<knob>(ctx, args)` functions sharing an explicit context object.
-**Gate:** `--dry-run` output must be byte-identical before/after against the
-same database snapshot (baseline capture procedure: run `--dry-run`, save,
-refactor, re-run, diff). Do not extract without the gate.
-
-### 2. Extract `apply_worker_results.py:apply_results()` (~1,340 lines)
-No clean comment seams; this is the knowledge-ingest path (highest blast
-radius in the system). Prerequisite: characterization tests that feed a
-synthetic worker_results fixture through the full function against a
-temp DB and assert the resulting rows. Write those first; extract second.
-
-### 3. Finish path centralization
+### 1. Finish path centralization
 The migration covered module-level constants. Inline
 `os.path.expanduser("~/.hermes/...")` call sites remain in many scripts —
 migrate opportunistically when touching a file (`prometheus_paths.under_home`),
-not as a big-bang rewrite.
+not as a big-bang rewrite. Known instance worth calling out: `auto_tune.py`
+line ~32 derives its home from `$HOME`, not HERMES_HOME (its dry-run gate
+harness has to fake `$HOME`).
 
-### 4. Exception-handling triage
+### 2. Exception-handling triage
 414 `except Exception` / 33 bare `except` across the tree. Policy (do not
 blanket-remove — fail-open is deliberate in cron lanes):
 - failure expected → log a structured reason
