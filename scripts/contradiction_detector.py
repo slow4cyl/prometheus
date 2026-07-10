@@ -35,7 +35,7 @@ def detect_replication_contradictions(conn, dry_run=False):
         JOIN knowledge_claims kc ON kc.first_experiment_id = rr.original_experiment_id
                                  OR kc.last_experiment_id = rr.original_experiment_id
         WHERE rr.replication_status = 'disagreed'
-          AND (kc.claim_status IS NULL OR kc.claim_status NOT IN ('DISPUTED', 'ESTABLISHED'))
+          AND (kc.claim_status IS NULL OR kc.claim_status NOT IN ('DISPUTED', 'ESTABLISHED', 'MERGED'))
     """).fetchall()
 
     updated = 0
@@ -75,7 +75,7 @@ def detect_worker_contradictions(conn, dry_run=False):
         FROM knowledge_claims kc
         JOIN worker_results wr1 ON wr1.experiment_id = kc.first_experiment_id
         WHERE kc.claim_status IS NULL
-           OR kc.claim_status NOT IN ('DISPUTED', 'ESTABLISHED')
+           OR kc.claim_status NOT IN ('DISPUTED', 'ESTABLISHED', 'MERGED')
         GROUP BY kc.id
         HAVING wr_support > 0 AND wr_refute > 0
     """).fetchall()

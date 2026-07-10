@@ -110,3 +110,29 @@ def test_rehash_carries_hash_when_no_canonical_member():
 
 def test_merged_is_exempt_from_recompute():
     assert "MERGED" in maturity.EXEMPT_STATUSES
+
+
+def test_inline_dispute_markers_skip_merged_tombstones():
+    """A MERGED tombstone whose experiment has a disagreed replication OR
+    contradictory workers must NOT be flipped back to DISPUTED (the inline
+    markers bypass the guarded recompute — they need their own MERGED guard)."""
+    import contradiction_detector as cd
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    conn.executescript("""
+        CREATE TABLE knowledge_claims (id INTEGER PRIMARY KEY, hypothesis_text TEXT,
+            claim_status TEXT, first_experiment_id TEXT, last_experiment_id TEXT,
+            contradiction_count INTEGER DEFAULT 0, last_updated_at REAL);
+        CREATE TABLE replication_results (original_experiment_id TEXT,
+            validation_experiment_id TEXT, original_finding TEXT,
+            validation_finding TEXT, replication_status TEXT);
+        CREATE TABLE worker_results (experiment_id TEXT, hypothesis_supported INTEGER);
+    """)
+    conn.execute("INSERT INTO knowledge_claims (id, hypothesis_text, claim_status, first_experiment_id) "
+                 "VALUES (1,'q','MERGED','exp_a')")
+    conn.execute("INSERT INTO replication_results VALUES ('exp_a','exp_b','f1','f2','disagreed')")
+    conn.executemany("INSERT INTO worker_results VALUES ('exp_a', ?)", [(1,), (0,)])
+    conn.commit()
+    assert cd.detect_replication_contradictions(conn, dry_run=True) == 0
+    assert cd.detect_worker_contradictions(conn, dry_run=True) == 0
+    assert conn.execute("SELECT claim_status FROM knowledge_claims WHERE id=1").fetchone()[0] == "MERGED"

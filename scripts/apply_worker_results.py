@@ -1110,10 +1110,14 @@ def _stage_adversarial_routing(ctx):
                         except Exception as _se:
                             print(f"  WARN: scope append failed: {_se}")
                     if _adv_status == 'refuted':
+                        # Never re-status a MERGED tombstone (attacks route to
+                        # the surviving canonical claim by hash; a stale loser
+                        # id must not be flipped back onto the shelf).
                         conn.execute(
                             "UPDATE knowledge_claims SET claim_status = 'DISPUTED', "
                             "contradiction_count = COALESCE(contradiction_count, 0) + 1, "
-                            "last_updated_at = ? WHERE id = ?",
+                            "last_updated_at = ? WHERE id = ? "
+                            "AND COALESCE(claim_status,'') != 'MERGED'",
                             (now_unix, _adv_claim))
                         print(f"  [ADVERSARIAL] claim {_adv_claim} DISPUTED "
                               f"(attack succeeded)")
