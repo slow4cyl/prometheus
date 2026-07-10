@@ -39,9 +39,10 @@ import traceback
 sys.path.insert(0, os.path.expanduser("~/.hermes/scripts"))
 from calibration_features import (extract_features, FEATURE_NAMES,  # noqa: E402
                                   FEATURE_VERSION)
+from prometheus_paths import KANBAN_DB, PROMETHEUS_DB, under_home  # noqa: E402
 
-DB = os.path.expanduser("~/.hermes/prometheus.db")
-MODEL_DIR = os.path.expanduser("~/.hermes/models/calibration")
+DB = PROMETHEUS_DB
+MODEL_DIR = under_home("models", "calibration")
 CURRENT = os.path.join(MODEL_DIR, "model_current.pkl")
 NUMPY_CURRENT = os.path.join(MODEL_DIR, "model_current.json")  # runtime, sklearn-free
 
@@ -95,7 +96,7 @@ def load_data():
         import re as _re
         
         # Use a fresh connection for kanban lookups (the main conn cursor is exhausted)
-        kconn = sqlite3.connect(f"file:{os.path.expanduser('~/.hermes/kanban.db')}?mode=ro", uri=True, timeout=10)
+        kconn = sqlite3.connect(f"file:{KANBAN_DB}?mode=ro", uri=True, timeout=10)
         kconn.execute("PRAGMA busy_timeout=10000")
         
         # Get ALL worker_results with kanban_task_id (separate query, same DB)

@@ -56,6 +56,7 @@ import sys
 import time
 from collections import Counter
 from pathlib import Path
+from prometheus_paths import KANBAN_DB, PROMETHEUS_DB, STATE_FILE
 
 # Add scripts dir to path for curiosity_scorer and gpu_route import
 
@@ -88,7 +89,7 @@ try:
 except ImportError:
     TRANSFER_TRACKING_AVAILABLE = False
 
-SELF_STATE_PATH = os.path.expanduser("~/.hermes/self_state.json")
+SELF_STATE_PATH = STATE_FILE
 # Fleet size + lane split come from worker_config.py (the single dial).
 # Override with PROMETHEUS_WORKER_COUNT env var. See worker_config.py.
 try:
@@ -178,7 +179,7 @@ try:
 except Exception:
     # Last-resort fallback: max sequential id across prometheus, never < 1.
     try:
-        _conn = sqlite3.connect(os.path.expanduser("~/.hermes/prometheus.db"), timeout=5)
+        _conn = sqlite3.connect(PROMETHEUS_DB, timeout=5)
         _rows = _conn.execute("SELECT id FROM experiments").fetchall()
         _conn.close()
         _ids = [int(m.group(1)) for r in _rows
@@ -242,7 +243,7 @@ def get_running_assignees():
     which returns 37MB+ of JSON at scale (22K+ tasks).
     """
     try:
-        db_path = os.path.expanduser("~/.hermes/kanban.db")
+        db_path = KANBAN_DB
         db = sqlite3.connect(db_path, timeout=5)
         db.execute("PRAGMA busy_timeout=3000")
         rows = db.execute(
@@ -261,7 +262,7 @@ def get_running_titles():
     which returns 37MB+ of JSON at scale (22K+ tasks).
     """
     try:
-        db_path = os.path.expanduser("~/.hermes/kanban.db")
+        db_path = KANBAN_DB
         db = sqlite3.connect(db_path, timeout=5)
         db.execute("PRAGMA busy_timeout=3000")
         rows = db.execute(
@@ -300,7 +301,7 @@ def rag_dedup_check(hypothesis):
         if exp_ref_match:
             ref_id = f'exp_{exp_ref_match.group(1)}'
             try:
-                db_path = os.path.expanduser("~/.hermes/prometheus.db")
+                db_path = PROMETHEUS_DB
                 db = sqlite3.connect(db_path, timeout=3)
                 db.execute("PRAGMA busy_timeout=2000")
                 row = db.execute(
@@ -403,7 +404,7 @@ def score_queue_items():
     """
     try:
         import sqlite3
-        db_path = os.path.expanduser("~/.hermes/prometheus.db")
+        db_path = PROMETHEUS_DB
         conn = sqlite3.connect(db_path, timeout=5)
         conn.execute("PRAGMA busy_timeout=3000")
         conn.row_factory = sqlite3.Row
@@ -817,7 +818,7 @@ def main():
     RAPID_FILL_THRESHOLD = 50  # Match worker count — keep all 50 workers fed
     try:
         import sqlite3 as _rapid_sqlite
-        _rapid_db = _rapid_sqlite.connect(os.path.expanduser("~/.hermes/kanban.db"), timeout=5)
+        _rapid_db = _rapid_sqlite.connect(KANBAN_DB, timeout=5)
         _ready_count = _rapid_db.execute(
             "SELECT COUNT(*) FROM tasks WHERE status='ready'"
         ).fetchone()[0]
@@ -838,7 +839,7 @@ def main():
         # Policy says what we WANT to happen.
         try:
             import sqlite3 as _pol_sqlite, re as _pol_re
-            _pol_db = _pol_sqlite.connect(os.path.expanduser("~/.hermes/prometheus.db"), timeout=5)
+            _pol_db = _pol_sqlite.connect(PROMETHEUS_DB, timeout=5)
             # Get confirmation-weighted evidence per domain
             _domain_evidence = {}
             for _row in _pol_db.execute("""
@@ -889,7 +890,7 @@ def main():
         all_workers = ["default"]
         free = [w for w in all_workers if w not in running]
         _created = 0
-        _kanban = sqlite3.connect(os.path.expanduser("~/.hermes/kanban.db"), timeout=10)
+        _kanban = sqlite3.connect(KANBAN_DB, timeout=10)
         for s in to_create:
             if not free:
                 break
@@ -950,7 +951,7 @@ def main():
     completed_hyps = {}
     completed_results = {}
     try:
-        db_path = os.path.expanduser("~/.hermes/prometheus.db")
+        db_path = PROMETHEUS_DB
         db = sqlite3.connect(db_path, timeout=5)
         db.execute("PRAGMA busy_timeout=3000")
         rows = db.execute(
@@ -1200,7 +1201,7 @@ def main():
     # Load governance statuses for enforcement
     try:
         import sqlite3 as _sql
-        _gdb = _sql.connect(os.path.expanduser("~/.hermes/prometheus.db"), timeout=5)
+        _gdb = _sql.connect(PROMETHEUS_DB, timeout=5)
         _gdb.execute("PRAGMA busy_timeout=3000")
         _grows = _gdb.execute("SELECT claim_text, status FROM architectural_claims").fetchall()
         _gdb.close()

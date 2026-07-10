@@ -55,7 +55,7 @@ Usage:
     python3 independence_gate.py --enqueue --limit 5   # clean-room lane (DELIBERATE)
 """
 import argparse
-from prometheus_paths import KANBAN_DB as _PP_KANBAN_DB, PROMETHEUS_DB as _PP_PROMETHEUS_DB
+from prometheus_paths import KANBAN_DB as _PP_KANBAN_DB, PROMETHEUS_DB as _PP_PROMETHEUS_DB, under_home
 import json
 import os
 import sqlite3
@@ -64,8 +64,8 @@ import time
 
 DB = _PP_PROMETHEUS_DB
 KANBAN = _PP_KANBAN_DB
-REPORT = os.path.expanduser("~/.hermes/independence_report.json")
-ARMED = os.path.expanduser("~/.hermes/independence_armed.json")
+REPORT = under_home("independence_report.json")
+ARMED = under_home("independence_armed.json")
 ENQUEUER = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                         "adversarial_replication_enqueuer.py")
 
@@ -576,7 +576,7 @@ def sweep_missing_stamps(settle_seconds=900, cap=25000):
     try:
         from prior_feed_stamp import FEED_MARK as _FM, _fed_hashes as _fh, DB as _PDB
         import json as _j
-        pk = os.path.expanduser("~/.hermes/kanban.db")
+        pk = _PP_KANBAN_DB
         pc = sqlite3.connect(f"file:{_PDB}?mode=ro", uri=True)
         have = {r[0] for r in pc.execute("SELECT kanban_task_id FROM task_prior_feed")}
         pc.close()

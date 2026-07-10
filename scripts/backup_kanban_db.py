@@ -33,10 +33,11 @@ import sqlite3
 import sys
 import time
 from pathlib import Path
+from prometheus_paths import BACKUPS_DIR, KANBAN_DB
 
-BACKUP_DIR = Path.home() / ".hermes" / "backups" / "kanban-db"
-SOURCE = Path.home() / ".hermes" / "kanban.db"
-LOCK_FILE = Path.home() / ".hermes" / "backups" / "kanban-db.lock"
+BACKUP_DIR = Path(BACKUPS_DIR) / "kanban-db"
+SOURCE = Path(KANBAN_DB)
+LOCK_FILE = Path(BACKUPS_DIR) / "kanban-db.lock"
 MAX_BACKUPS = 10  # 5h of rolling coverage at 30-min intervals (was 28/14h — trimmed with prometheus retention to reclaim backups/ space)
 
 

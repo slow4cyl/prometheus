@@ -38,6 +38,9 @@ def get_db_path():
     which split worker results away from the brain DB and caused silent
     data loss. Now always returns the canonical ~/.hermes/prometheus.db.
     """
+    # DELIBERATE hardcode — do NOT migrate to prometheus_paths: that module
+    # honors HERMES_HOME, and honoring it here previously split worker
+    # results away from the brain DB (silent data loss; see docstring).
     home = os.path.expanduser("~")
     canonical = os.path.join(home, ".hermes", "prometheus.db")
     if os.path.exists(canonical):

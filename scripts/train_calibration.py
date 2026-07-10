@@ -26,6 +26,7 @@ import time
 import random
 import sqlite3
 from math import log, exp
+from prometheus_paths import PROMETHEUS_DB as _PROMETHEUS_DB, under_home
 
 try:
     import numpy as np
@@ -33,9 +34,9 @@ except ImportError:
     print("numpy required. Install with: uv pip install numpy", file=sys.stderr)
     sys.exit(1)
 
-PROMETHEUS_DB = os.path.expanduser("~/.hermes/prometheus.db")
-MODEL_JSON = os.path.expanduser("~/.hermes/models/calibration/model_current.json")
-BACKUP_DIR = os.path.expanduser("~/.hermes/models/calibration/backups")
+PROMETHEUS_DB = _PROMETHEUS_DB
+MODEL_JSON = under_home("models", "calibration", "model_current.json")
+BACKUP_DIR = under_home("models", "calibration", "backups")
 
 
 def load_model():

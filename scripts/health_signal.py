@@ -13,7 +13,7 @@ Concerns addressed:
 """
 
 import json
-from prometheus_paths import KANBAN_DB as _PP_KANBAN_DB, PROMETHEUS_DB as _PP_PROMETHEUS_DB
+from prometheus_paths import KANBAN_DB as _PP_KANBAN_DB, PROMETHEUS_DB as _PP_PROMETHEUS_DB, STATE_FILE, under_home
 import os
 import sqlite3
 import time
@@ -26,9 +26,9 @@ Part of the Prometheus research infrastructure.
 
 KANBAN_DB = _PP_KANBAN_DB
 PROMETHEUS_DB = _PP_PROMETHEUS_DB
-SELF_STATE = os.path.expanduser("~/.hermes/self_state.json")
-HEALTH_FILE = os.path.expanduser("~/.hermes/system_health.json")
-QUEUE_FLOW_FILE = os.path.expanduser("~/.hermes/queue_flow.json")
+SELF_STATE = STATE_FILE
+HEALTH_FILE = under_home("system_health.json")
+QUEUE_FLOW_FILE = under_home("queue_flow.json")
 
 # Thresholds
 FRESHNESS_THRESHOLD = 300  # 5 minutes — longer than worst-case Director cycle

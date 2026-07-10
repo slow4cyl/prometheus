@@ -68,17 +68,24 @@ fixed, which is why the rest of its list is taken seriously.)
   deep-lineage exemption, lineage_live, caveat confidence cap, PARTIALLY
   REFUTED/REFUTED_SETUP verdicts, junk-domain classification). Suite 56 green.
 
+- **Path centralization COMPLETE** — the remaining ~66 inline
+  `expanduser("~/.hermes/…")` / `Path.home()` sites across 16 scripts
+  (incl. the needs-care set: batch_create_tasks, curiosity_scorer,
+  prometheus_db, independence_gate) migrated to `prometheus_paths`
+  constants / `under_home()`. Gates held: value-equivalence proof (every
+  migrated path resolves byte-identical on the live box), import smoke of
+  all 16 under an isolated HERMES_HOME, suite green, and auto_tune's
+  `--dry-run` byte-identical with the migrated curiosity_scorer in place
+  (auto_tune rewrites that file as text). Deliberate exceptions kept and
+  annotated: `write_worker_result`'s canonical-DB anchors (honoring
+  HERMES_HOME there caused silent data loss), `experiment_rag._MAIN_HERMES`
+  (an intentional main-home anchor), prompt-text literals, and
+  `sys.path.insert` bootstrap lines. auto_tune itself honors HERMES_HOME
+  (earlier commit).
+
 ## Open
 
-### 1. Finish path centralization
-The migration covered module-level constants. Inline
-`os.path.expanduser("~/.hermes/...")` call sites remain in many scripts —
-migrate opportunistically when touching a file (`prometheus_paths.under_home`),
-not as a big-bang rewrite. Known instance worth calling out: `auto_tune.py`
-line ~32 derives its home from `$HOME`, not HERMES_HOME (its dry-run gate
-harness has to fake `$HOME`).
-
-### 2. Exception-handling triage
+### 1. Exception-handling triage
 414 `except Exception` / 33 bare `except` across the tree. Policy (do not
 blanket-remove — fail-open is deliberate in cron lanes):
 - failure expected → log a structured reason

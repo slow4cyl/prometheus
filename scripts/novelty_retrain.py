@@ -17,7 +17,7 @@ Usage:
 """
 
 import argparse
-from prometheus_paths import PROMETHEUS_DB as _PP_PROMETHEUS_DB
+from prometheus_paths import PROMETHEUS_DB as _PP_PROMETHEUS_DB, under_home
 import json
 import os
 import re
@@ -26,10 +26,10 @@ import sys
 import time
 
 DB_PATH = _PP_PROMETHEUS_DB
-LABELS_PATH = os.path.expanduser("~/.hermes/novelty_labels.json")
-MODEL_PATH = os.path.expanduser("~/.hermes/curiosity_scorer_model.json")
-LOCK_PATH = os.path.expanduser("~/.hermes/.novelty_retrain.lock")
-STATE_PATH = os.path.expanduser("~/.hermes/novelty_retrain_state.json")
+LABELS_PATH = under_home("novelty_labels.json")
+MODEL_PATH = under_home("curiosity_scorer_model.json")
+LOCK_PATH = under_home(".novelty_retrain.lock")
+STATE_PATH = under_home("novelty_retrain_state.json")
 
 MIN_NEW_LABELS = 50  # Retrain after this many new labels
 

@@ -57,6 +57,7 @@ import sys
 import random
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
+from prometheus_paths import PROMETHEUS_DB, STATE_FILE, under_home
 
 _CLAIM_CACHE = {"statuses": None, "timestamp": 0}
 _CLAIM_CACHE_TTL = 300  # 5 minutes
@@ -80,7 +81,7 @@ def load_claim_statuses():
     statuses = {}
     try:
         import sqlite3 as _sql
-        _db_path = os.path.expanduser("~/.hermes/prometheus.db")
+        _db_path = PROMETHEUS_DB
         _conn = _sql.connect(_db_path, timeout=5)
         _conn.execute("PRAGMA busy_timeout=3000")
         rows = _conn.execute(
@@ -117,7 +118,7 @@ Usage: python3 curiosity_scorer.py [options]
 """
 
 
-SELF_STATE_PATH = os.path.expanduser("~/.hermes/self_state.json")
+SELF_STATE_PATH = STATE_FILE
 RECENT_N = 20  # Number of recent experiments to compare against
 
 # Experiment index cache — avoids rebuilding 14K+ experiment index every call
@@ -132,7 +133,7 @@ _EXP_INDEX_TTL = 300  # 5 minutes
 # (the old code's `except: pass` even tolerated a MISSING file silently). The
 # snapshot stamps `last_updated` (unix int), so we can detect staleness and fall
 # back to the live DB column. Threshold = 4 missed 15-min cycles.
-REPL_STATE_PATH = os.path.expanduser("~/.hermes/replication_state.json")
+REPL_STATE_PATH = under_home("replication_state.json")
 REPL_STATE_MAX_AGE_S = 3600  # 1h; replication_tracker runs every 15m
 _REPL_STATE_CACHE = {"data": None, "stale": None, "loaded_at": 0, "live_breaks": None}
 _REPL_STATE_TTL = 60  # re-stat the file at most once a minute
@@ -190,7 +191,7 @@ def live_domain_break_score(source_domain):
         cache = {}
         try:
             import sqlite3
-            _db = os.path.expanduser("~/.hermes/prometheus.db")
+            _db = PROMETHEUS_DB
             _conn = sqlite3.connect(f"file:{_db}?mode=ro", uri=True, timeout=5)
             _conn.execute("PRAGMA busy_timeout=3000")
             for dom, avg_bi, cnt in _conn.execute(
@@ -220,7 +221,7 @@ def live_domain_disagreement(source_domain):
         cache = {}
         try:
             import sqlite3
-            _db = os.path.expanduser("~/.hermes/prometheus.db")
+            _db = PROMETHEUS_DB
             _conn = sqlite3.connect(f"file:{_db}?mode=ro", uri=True, timeout=5)
             _conn.execute("PRAGMA busy_timeout=3000")
             for dom, total, dis in _conn.execute(
@@ -249,7 +250,7 @@ def live_disagreed_experiment_ids():
         cache = set()
         try:
             import sqlite3
-            _db = os.path.expanduser("~/.hermes/prometheus.db")
+            _db = PROMETHEUS_DB
             _conn = sqlite3.connect(f"file:{_db}?mode=ro", uri=True, timeout=5)
             _conn.execute("PRAGMA busy_timeout=3000")
             cache = {r[0] for r in _conn.execute(
@@ -486,7 +487,7 @@ def build_experiment_index(state):
     # Source 2: prometheus.db (richer data, more complete)
     try:
         import sqlite3
-        db_path = os.path.expanduser("~/.hermes/prometheus.db")
+        db_path = PROMETHEUS_DB
         db = sqlite3.connect(db_path, timeout=5)
         db.execute("PRAGMA busy_timeout=3000")
         rows = db.execute(
@@ -932,8 +933,7 @@ def score_item(item_text, exp_index, recent_threads, source_domain=None, item_di
         domain_health_bonus = 0  # domain taxonomy dead — audit June 12 2026
     if "[transfer]" in item_text.lower() and source_domain:
         try:
-            _dhc_path = os.path.join(os.path.expanduser("~"),
-                                     ".hermes", "domain_health_cache.json")
+            _dhc_path = under_home("domain_health_cache.json")
             if os.path.exists(_dhc_path):
                 with open(_dhc_path) as _f:
                     _dhc = json.load(_f)
@@ -990,7 +990,7 @@ def score_item(item_text, exp_index, recent_threads, source_domain=None, item_di
     # Loaded from outcome_routing.py cache (flow + outcome + novelty scores)
     outcome_bonus = 0
     try:
-        _outcome_cache_path = os.path.join(os.path.expanduser("~"), ".hermes", "routing_outcome_cache.json")
+        _outcome_cache_path = under_home("routing_outcome_cache.json")
         if os.path.exists(_outcome_cache_path):
             with open(_outcome_cache_path) as _f:
                 _outcome_cache = json.load(_f)
@@ -1020,7 +1020,7 @@ def score_item(item_text, exp_index, recent_threads, source_domain=None, item_di
         export_bonus = 10
     try:
         import sqlite3 as _sql
-        _db_path = os.path.join(os.path.expanduser("~"), ".hermes", "prometheus.db")
+        _db_path = PROMETHEUS_DB
         _conn = _sql.connect(_db_path)
         _export_found = False
         # Check source_exp_id directly
@@ -1134,8 +1134,7 @@ def score_item(item_text, exp_index, recent_threads, source_domain=None, item_di
     claim_status_info = None
     try:
         import sqlite3 as _sql
-        _db_path = os.path.join(os.path.expanduser("~"),
-                                 ".hermes", "prometheus.db")
+        _db_path = PROMETHEUS_DB
         _conn = _sql.connect(_db_path, timeout=3)
         _conn.execute("PRAGMA busy_timeout=2000")
         from claim_lifecycle import hypothesis_hash
@@ -1282,7 +1281,7 @@ def score_all(state=None):
     # items only in the DB are converted to the dict format the scorer expects.
     try:
         import sqlite3
-        db_path = os.path.expanduser("~/.hermes/prometheus.db")
+        db_path = PROMETHEUS_DB
         db = sqlite3.connect(db_path, timeout=5)
         db.execute("PRAGMA busy_timeout=3000")
         db_rows = db.execute(
@@ -1540,7 +1539,7 @@ def apply_scores(scored):
     import time
     import sqlite3
 
-    db_path = os.path.expanduser("~/.hermes/prometheus.db")
+    db_path = PROMETHEUS_DB
     now = time.time()
     updated = 0
 

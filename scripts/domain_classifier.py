@@ -29,6 +29,7 @@ import numpy as np
 import urllib.request
 from datetime import datetime, timezone
 from collections import Counter
+from prometheus_paths import KANBAN_DB, PROMETHEUS_DB, under_home
 
 # ── TITLE PATTERNS ──
 # Strong signals: these patterns are reliable when matched in titles.
@@ -340,7 +341,7 @@ def _load_centroids():
     global _CENTROIDS_CACHE
     if _CENTROIDS_CACHE is not None:
         return _CENTROIDS_CACHE
-    centroid_path = os.path.expanduser("~/.hermes/domain_embeddings.json")
+    centroid_path = under_home("domain_embeddings.json")
     try:
         with open(centroid_path) as f:
             data = json.load(f)
@@ -390,7 +391,7 @@ def _fallback_classify(text, exclude_domain=None):
 
 
 # ── PERSISTENT INSTRUMENTATION LOGGING ──
-LOG_DIR = os.path.expanduser("~/.hermes/classifier")
+LOG_DIR = under_home("classifier")
 LOG_PATH = os.path.join(LOG_DIR, "routing_log.jsonl")
 
 
@@ -460,7 +461,7 @@ def detect_anomalies(source_domain, finding_text, body,
         similarity_score – fraction of finding terms found in baseline [0..1]
     """
     # ── Load baseline titles for this domain from kanban.db ──
-    db_path = os.path.expanduser("~/.hermes/kanban.db")
+    db_path = KANBAN_DB
     baseline_titles = []
     if os.path.exists(db_path):
         try:
@@ -568,7 +569,7 @@ def _load_db_domains():
     """Return set of all unique domains from the experiments table."""
     try:
         import sqlite3
-        db = os.path.expanduser("~/.hermes/prometheus.db")
+        db = PROMETHEUS_DB
         if not os.path.exists(db):
             return set()
         conn = sqlite3.connect(db, timeout=5)

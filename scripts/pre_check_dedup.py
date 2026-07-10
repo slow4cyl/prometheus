@@ -24,6 +24,7 @@ import os
 import time
 import hashlib
 from collections import Counter
+from prometheus_paths import KANBAN_DB, PROMETHEUS_DB, under_home
 
 # --- Constants (must match batch_create_tasks.py) ---
 
@@ -40,7 +41,7 @@ PHRASE_MIN_COUNT = 2
 
 # Layer 3: Embedding cosine similarity threshold
 EMBEDDING_COSINE_THRESHOLD = 0.55  # Catches true paraphrases (0.567), rejects related-but-different (0.516)
-EMBEDDING_CACHE_DIR = os.path.expanduser("~/.hermes/cache/embeddings")
+EMBEDDING_CACHE_DIR = under_home("cache", "embeddings")
 EMBEDDING_CACHE_TTL = 3600  # Rebuild cache after 1 hour
 
 
@@ -75,7 +76,7 @@ def extract_key_phrases(text):
 
 def load_completed_experiments():
     """Load completed experiments from prometheus.db."""
-    db_path = os.path.expanduser("~/.hermes/prometheus.db")
+    db_path = PROMETHEUS_DB
     completed_hyps = {}
     completed_results = {}
     completed_types = {}  # exp_id -> experiment_type (for [TRANSFER] dedup exemption)
@@ -101,7 +102,7 @@ def load_completed_experiments():
 
 def load_running_titles(exclude_title=None):
     """Load running task titles from kanban.db, optionally excluding one title."""
-    db_path = os.path.expanduser("~/.hermes/kanban.db")
+    db_path = KANBAN_DB
     titles = []
     try:
         db = sqlite3.connect(db_path, timeout=5)

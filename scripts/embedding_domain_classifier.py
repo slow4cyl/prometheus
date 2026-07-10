@@ -41,6 +41,7 @@ from typing import Optional, List, Tuple
 # Import regex-based fallback
 sys.path.insert(0, os.path.dirname(__file__))
 from domain_classifier import classify as classify_regex
+from prometheus_paths import under_home
 
 # ONNX backend (preferred — sub-5ms latency)
 # ONNX bge-small-en (:9151) retired 2026-07-05 — 384-d, incompatible with the 1024-d Qwen3 centroids.
@@ -199,7 +200,7 @@ DOMAIN_DESCRIPTIONS = {
 _domain_embeddings = None
 
 # Auto-generated descriptions (extended by cron, not hard-coded)
-AUTO_DESCRIPTIONS_PATH = os.path.expanduser("~/.hermes/domain_auto_descriptions.json")
+AUTO_DESCRIPTIONS_PATH = under_home("domain_auto_descriptions.json")
 
 
 def load_auto_descriptions() -> dict:
@@ -372,7 +373,7 @@ def auto_extend_descriptions(min_experiments: int = 5) -> list:
 
     new_embs = get_embeddings_batch(descriptions_to_embed)
     # Load existing cache and add new centroids
-    cache_path = os.path.expanduser("~/.hermes/domain_embeddings.json")
+    cache_path = under_home("domain_embeddings.json")
     if os.path.exists(cache_path):
         try:
             with open(cache_path) as f:
@@ -507,7 +508,7 @@ def load_domain_embeddings():
     if _domain_embeddings is not None:
         return _domain_embeddings
     
-    cache_path = os.path.expanduser("~/.hermes/domain_embeddings.json")
+    cache_path = under_home("domain_embeddings.json")
     
     # Try to load from cache
     if os.path.exists(cache_path):

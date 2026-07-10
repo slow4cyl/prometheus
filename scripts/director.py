@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Director Cycle — one-pass strategic oversight."""
 import json, os, sys, sqlite3, subprocess
-from prometheus_paths import KANBAN_DB as _PP_KANBAN_DB
+from prometheus_paths import KANBAN_DB as _PP_KANBAN_DB, SCRIPTS_DIR, STATE_FILE, under_home
 from datetime import datetime, timezone
 
 DB = _PP_KANBAN_DB
-SELF_STATE = os.path.expanduser("~/.hermes/self_state.json")
-REFILLER_SUMMARY = os.path.expanduser("~/.hermes/refiller_summary.json")
+SELF_STATE = STATE_FILE
+REFILLER_SUMMARY = under_home("refiller_summary.json")
 
 def get_running_tasks():
     conn = sqlite3.connect(DB)
@@ -50,7 +50,7 @@ def get_blocked_tasks():
 def check_synthesis_health():
     try:
         r = subprocess.run(
-            ["python3", os.path.expanduser("~/.hermes/scripts/check_synthesis_health.py")],
+            ["python3", os.path.join(SCRIPTS_DIR, "check_synthesis_health.py")],
             capture_output=True, text=True, timeout=60
         )
         return r.stdout.strip()
@@ -115,7 +115,7 @@ def main():
         print("  Running queue_curator.py --dry-run...")
         try:
             r = subprocess.run(
-                ["python3", os.path.expanduser("~/.hermes/scripts/queue_curator.py"), "--dry-run"],
+                ["python3", os.path.join(SCRIPTS_DIR, "queue_curator.py"), "--dry-run"],
                 capture_output=True, text=True, timeout=120
             )
             # Show last 20 lines of output

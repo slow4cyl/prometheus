@@ -3,7 +3,7 @@ Prometheus State Database v2 — SQLite-backed state management.
 Fixed for 20+ concurrent workers: context manager pattern, busy timeout, WAL mode.
 """
 import sqlite3
-from prometheus_paths import HERMES_HOME as _PP_HERMES_HOME
+from prometheus_paths import HERMES_HOME as _PP_HERMES_HOME, STATE_FILE, under_home
 import json
 import os
 import subprocess
@@ -230,7 +230,7 @@ def get_metrics_summary():
 def import_from_json(json_path=None):
     """Import existing self_state.json into SQLite."""
     if json_path is None:
-        json_path = os.path.expanduser("~/.hermes/self_state.json")
+        json_path = STATE_FILE
     with open(json_path) as f:
         state = json.load(f)
     now = time.time()
@@ -274,7 +274,7 @@ def import_from_json(json_path=None):
             priority = q.get("priority", 5) if isinstance(q, dict) else 5
             conn.execute("INSERT INTO curiosities (text, priority, status, created_at) VALUES (?, ?, 'active', ?)",
                         (text, priority, now))
-        skills_base = os.path.expanduser("~/.hermes/skills")
+        skills_base = under_home("skills")
         for cat in ["research", "mlops", "software-development", "inference",
                      "hermes-textgrad", "hermes-best-models", "graduated-scope-system",
                      "autonomous-ai-agents", "devops", "system-administration"]:

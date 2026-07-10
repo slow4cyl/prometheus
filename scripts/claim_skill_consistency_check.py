@@ -23,10 +23,11 @@ import sqlite3
 import sys
 import time
 from collections import defaultdict
+from prometheus_paths import PROMETHEUS_DB, under_home
 
 
 def get_db():
-    db_path = os.path.expanduser("~/.hermes/prometheus.db")
+    db_path = PROMETHEUS_DB
     for attempt in range(5):
         try:
             db = sqlite3.connect(db_path, timeout=10)
@@ -52,7 +53,7 @@ def load_thresholds(db):
 def scan_skill_files():
     """Scan all SKILL.md files for sections that might reference claims."""
     issues = []
-    skills_dir = os.path.expanduser("~/.hermes/skills")
+    skills_dir = under_home("skills")
 
     if not os.path.exists(skills_dir):
         return issues
@@ -186,7 +187,7 @@ def main():
     db.close()
 
     # Write output
-    output_path = os.path.expanduser("~/.hermes/claim_consistency.json")
+    output_path = under_home("claim_consistency.json")
     report = {
         "checked_at": time.time(),
         "total_issues": len(issues),

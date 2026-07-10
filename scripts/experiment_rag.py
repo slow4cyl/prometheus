@@ -22,7 +22,7 @@ Usage:
 """
 
 import os
-from prometheus_paths import HERMES_HOME as _PP_HERMES_HOME
+from prometheus_paths import HERMES_HOME as _PP_HERMES_HOME, under_home
 import sys
 import re
 import json
@@ -585,7 +585,7 @@ def index_experiments(incremental: bool = True, reindex_failed: bool = False, fo
     url = start_embedding_server()
 
     # Fast path: check last index time to skip unchanged files by mtime
-    last_index_path = os.path.expanduser("~/.hermes/.rag_last_index_time")
+    last_index_path = under_home(".rag_last_index_time")
     last_index_time = 0
     if os.path.exists(last_index_path):
         try:
@@ -595,7 +595,7 @@ def index_experiments(incremental: bool = True, reindex_failed: bool = False, fo
             pass
 
     # Ultra-fast path: if directory mtime hasn't changed, skip entirely
-    dir_mtime_path = os.path.expanduser("~/.hermes/.rag_dir_mtime")
+    dir_mtime_path = under_home(".rag_dir_mtime")
     if incremental and not force and last_index_time > 0:
         try:
             dir_mtime = EXPERIMENTS_DIR.stat().st_mtime

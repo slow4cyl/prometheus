@@ -44,11 +44,12 @@ import sqlite3
 import sys
 import time
 from pathlib import Path
+from prometheus_paths import ARTIFACTS_DIR, KANBAN_DB, PROMETHEUS_DB, under_home
 
-PROM = Path.home() / ".hermes" / "prometheus.db"
-KANBAN = Path.home() / ".hermes" / "kanban.db"
-REPORT = Path.home() / ".hermes" / "db_reconciliation_report.json"
-ARTIFACTS = Path.home() / ".hermes" / "artifacts"
+PROM = Path(PROMETHEUS_DB)
+KANBAN = Path(KANBAN_DB)
+REPORT = Path(under_home("db_reconciliation_report.json"))
+ARTIFACTS = Path(ARTIFACTS_DIR)
 
 # Frozen at deployment (2026-07-01, right after the backfill). Orphaned
 # worker_results existing at that moment are the 275 known quality-gate
