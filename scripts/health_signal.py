@@ -303,5 +303,18 @@ def record_queue_consume(count=1):
 
 
 if __name__ == "__main__":
+    import sys
+
     health = compute_health()
-    print(json.dumps(health, indent=2))
+    # Silent-when-healthy (watchdog convention shared with the other no_agent
+    # cron jobs). The job's real purpose is the system_health.json file write
+    # that the Director/watchdogs read; stdout is incidental. Emit the JSON only
+    # when invoked interactively (a human/agent at a tty), when HEALTH_VERBOSE is
+    # set, or when an ACTIONABLE alert is live — so the every-2-min cron runner
+    # stays quiet unless something is wrong. queue_healthy is deliberately NOT an
+    # alert trigger: its 30–50 band is far below the normal ~200 queue depth and
+    # would make the job print every run.
+    a = health["assessment"]
+    alert = a.get("conservative_mode") or a.get("token_burn_high")
+    if sys.stdout.isatty() or os.environ.get("HEALTH_VERBOSE") or alert:
+        print(json.dumps(health, indent=2))
