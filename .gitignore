@@ -6,3 +6,7 @@ __pycache__/
 logs/
 *.log
 .env
+
+# local Claude Code session artifacts — never publish
+.claude/
+.mcp.json
