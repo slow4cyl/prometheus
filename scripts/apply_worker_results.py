@@ -1519,6 +1519,24 @@ def _stage_insert_queue_additions(ctx):
             if len(item_words) < 3:
                 print(f"  [QA-SKIP] too few words: '{item_text[:60]}'")
                 continue
+            # CONTESTED-PAIR GATE at the intake (2026-07-12): a completed
+            # transfer task's own "--queue [TRANSFER] follow-up" suggestion
+            # re-spawns its pair — a self-sustaining chain no INJECTOR gate
+            # can stop (inject_opportunities is gated in all 4 tiers, yet
+            # quantization->calibration still reached n=855 re-tests and ten
+            # pairs burned ~150 tasks each in one week). A suggestion whose
+            # (src,tgt) the convergence lane already marked ill-posed
+            # (contested_transfer_pairs: n>=20, verdicts near coin-flip) is
+            # noise, not a question. Best-effort: any failure falls through.
+            if item_text.lstrip().startswith('[TRANSFER'):
+                try:
+                    from transfer_convergence import is_pair_contested, parse_pair
+                    _pair = parse_pair(item_text)
+                    if _pair and is_pair_contested(_pair[0], _pair[1]):
+                        print(f"  [QA-CONTESTED] ill-posed pair skipped: '{item_text[:60]}'")
+                        continue
+                except Exception:
+                    pass
             is_dup = False
 
             # Skip O(N*M) dedup when sets are too large (causes 300s timeouts)
