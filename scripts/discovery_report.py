@@ -131,8 +131,10 @@ def gather(conn):
     """).fetchall()
 
     shelf, bins = [], {routing.KNOWN_IN_LIT: [], routing.EMPIRICAL_FACT: [],
-                       routing.DERIVABLE: [], routing.UNRECONCILED: []}
+                       routing.DERIVABLE: [], routing.UNRECONCILED: [],
+                       routing.SPURIOUS_SUPPORT: []}
     unrec = routing.unreconciled_claims(conn)   # reconciliation gate ({} until critic runs)
+    spur = routing.spurious_support_claims(conn)   # false-consensus gate (SA >= 0.6)
     for r in rows:
         cid = r["claim_id"]
         atk = dict(conn.execute(
@@ -166,6 +168,9 @@ def gather(conn):
             citations=(aud["citations"] if aud else "") or "", scope=scope_txt or "",
             adversarial_texts=adv_prose, prior_work_citation=citation,
             is_empirical_fact=bool(r["is_fact"]), novelty_confidence=r["novelty_confidence"])
+        # DB-driven overrides; reconciliation wins ties (deeper defect).
+        if cid in spur:
+            route, reason = routing.SPURIOUS_SUPPORT, spur[cid][:200]
         if cid in unrec:
             # reconciliation gate: headline and mapped scope assert different
             # propositions — held off the shelf until arbitration reconciles them
@@ -545,6 +550,12 @@ _BIN_META = {
         "variable, or evidence attached to a different question. A discovery record needs one "
         "canonical claim; until an automatically enqueued arbitration reconciles the two texts, "
         "the entry is a contested hypothesis and is held off the shelf."),
+    routing.SPURIOUS_SUPPORT: ("Spurious support — the supporting evidence does not agree",
+        "The answer-consistency adjudicator scored this claim’s spurious-agreement at or above "
+        "0.6 — the same false-consensus bar that blocks promotion to ESTABLISHED. Its supporting "
+        "experiments carry the same label but measure different operationalizations (different "
+        "intervention, metric, or magnitude), so a high support count is not real corroboration. "
+        "The shelf has always footnoted that supports must agree; this makes that filter real."),
 }
 
 
@@ -561,8 +572,8 @@ def _binned_section(bins):
     if not total:
         return ""
     tables = []
-    for route in (routing.UNRECONCILED, routing.KNOWN_IN_LIT,
-                  routing.EMPIRICAL_FACT, routing.DERIVABLE):
+    for route in (routing.UNRECONCILED, routing.SPURIOUS_SUPPORT,
+                  routing.KNOWN_IN_LIT, routing.EMPIRICAL_FACT, routing.DERIVABLE):
         items = sorted(bins.get(route, []), key=lambda e: -(e["score"] or 0))
         if not items:
             continue
@@ -580,7 +591,8 @@ def _binned_section(bins):
         '<p class="sectionintro">A survivors-only shelf hides its own errors. These '
         f'{total} claims passed replication and attack — they are robust — but they are not '
         'shelvable discoveries: each names its own prior work, is an empirical lookup, is '
-        'analytically derivable, or carries a headline its own mapped scope contradicts. The '
+        'analytically derivable, carries a headline its own mapped scope contradicts, or rests '
+        'on supporting evidence that does not actually agree. The '
         'signal was already in the cards; the router now reads it instead of '
         'ranking past it. Shown with the reason each was moved, so the filter is auditable.</p>'
         + "".join(tables) + '</section>')

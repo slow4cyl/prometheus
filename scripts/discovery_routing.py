@@ -40,12 +40,19 @@ call something novel) wins ties:
   5. discovery      everything else; may carry a `sim_internal` FLAG (numbers are
                     parameter-dependent) that caps its novelty without hiding it
 
-One route is NOT produced by the cascade: `unreconciled` is a DB-driven OVERRIDE
-(claim-reconciliation gate, 2026-07-12). When claim_reconciliation_critic.py finds
-that a claim's headline and its mapped scope assert DIFFERENT propositions
-(#64355: headline "7 unique optimal LRs" vs scope "ALL ranks share optimal
-LR=0.1"), there is no single canonical claim to shelve — consumers override the
-cascade's route with UNRECONCILED until arbitration reconciles the texts.
+Two routes are NOT produced by the cascade — both DB-driven OVERRIDES that a
+claim's own subsystems already computed:
+  * `unreconciled` (claim-reconciliation gate, 2026-07-12): the reconciliation
+    critic found the headline and mapped scope asserting DIFFERENT propositions
+    (#64355: headline "7 unique optimal LRs" vs scope "ALL ranks share optimal
+    LR=0.1") — no single canonical claim to shelve until arbitration reconciles.
+  * `spurious_support` (2026-07-12): the claim's spurious_agreement (the
+    answer-consistency adjudicator's false-consensus score) is at/above the
+    same 0.6 the maturity gate uses to block ESTABLISHED — its supporting
+    experiments do not actually agree (#62492: 11 "supports" spanning ratios
+    0.44-15.8 measuring different operationalizations). The discovery page's
+    own footnote already PROMISED "spurious-agreement < 0.6 (supports must
+    agree)"; this override makes that promise true instead of aspirational.
 """
 import re
 
@@ -55,7 +62,12 @@ KNOWN_IN_LIT = "known_in_lit"
 EMPIRICAL_FACT = "empirical_fact"
 DERIVABLE = "derivable"
 SEARCH_MISS = "search_miss"
-UNRECONCILED = "unreconciled"     # override, not a cascade outcome — see docstring
+UNRECONCILED = "unreconciled"          # override, not a cascade outcome — see docstring
+SPURIOUS_SUPPORT = "spurious_support"  # override, not a cascade outcome — see docstring
+
+# the false-consensus ceiling — mirrors maturity.MATURITY_THRESHOLDS["established_sa_max"]
+# (kept as a literal so this module stays import-free; see spurious_support_claims)
+SPURIOUS_SA_MAX = 0.6
 
 ROUTE_LABEL = {
     DISCOVERY: "candidate discovery",
@@ -64,10 +76,11 @@ ROUTE_LABEL = {
     DERIVABLE: "derivable — analytic / definitional",
     SEARCH_MISS: "likely search miss",
     UNRECONCILED: "unreconciled — headline contradicts mapped scope",
+    SPURIOUS_SUPPORT: "spurious support — supporting evidence does not agree",
 }
 # routes that are kept OFF the discovery shelf
 OFF_SHELF = frozenset({KNOWN_IN_LIT, EMPIRICAL_FACT, DERIVABLE, SEARCH_MISS,
-                       UNRECONCILED})
+                       UNRECONCILED, SPURIOUS_SUPPORT})
 
 
 def unreconciled_claims(conn):
@@ -85,6 +98,25 @@ def unreconciled_claims(conn):
                            WHERE rr.claim_id = kc.id AND rr.conflict = 1
                            ORDER BY rr.reviewed_at DESC LIMIT 1)
             FROM knowledge_claims kc WHERE kc.scope_conflict = 1""")}
+    except Exception:
+        return {}
+
+
+def spurious_support_claims(conn, sa_max=SPURIOUS_SA_MAX):
+    """{claim_id: reason} for claims whose spurious_agreement is at/above the
+    false-consensus ceiling — their supporting experiments do not actually
+    measure the same thing, so a high support_count is not real corroboration.
+    The maturity gate already uses this exact threshold to block ESTABLISHED;
+    this applies the SAME bar to the discovery shelf (which admits REPLICATED),
+    honoring the discovery page's long-standing "supports must agree" footnote.
+    Returns {} if the column is absent (inert by construction)."""
+    try:
+        return {r[0]: (f"spurious_agreement={r[1]:.2f} ≥ {sa_max} "
+                       f"(supporting evidence does not agree)")
+                for r in conn.execute(
+                    "SELECT id, spurious_agreement FROM knowledge_claims "
+                    "WHERE spurious_agreement IS NOT NULL AND spurious_agreement >= ?",
+                    (sa_max,))}
     except Exception:
         return {}
 
@@ -553,18 +585,24 @@ def _selftest():
     agood = damb is None
     ok = ok and agood
     print(f"  [{'PASS' if agood else 'FAIL'}] ambiguous polarity no-fire -> {damb}")
-    # 67218 — labeled R² drift: headline "LR R²=1.00" (smooth regime) vs residue
-    # "R²<0.5" (the 41.7%-failure regime). The card reports two very different values
-    # for the quantity it exists to report; the flag keeps that visible. Frozen for
-    # regression alongside #68481 (the reviewer asked for both to stay covered).
+    # 67218 — SUPERSEDED EXPECTATION (2026-07-12). The case froze "headline LR
+    # R²=1.00 vs residue R²<0.5 must fire" — but the residue's R²<0.5 is
+    # operator-bound text, and the #66039 fix deliberately excludes comparison
+    # operators (a threshold/criterion is not a reported statistic; that rule
+    # killed false flags on the top two shelf cards). The two frozen promises
+    # conflict; the #66039 rule wins because its false-positive class hit the
+    # PUBLIC shelf, and the #67218 self-disagreement shape is now covered by a
+    # stronger instrument: claim_reconciliation_critic (LLM panel) judges the
+    # full headline-vs-scope proposition and gates the shelf on it. The regex
+    # detector stays conservative; the case now pins the exclusion.
     d67 = central_quantity_drift(
         "ARBITRATION_VERDICT: REGIME_SPLIT. Smooth classifiers (LR R²=1.00) have high "
         "R². Non-smooth classifiers (RF R²=-3 to -97) fail.",
         "The entire quantitative claim: 41.7% failure rate (10/24 experiments, R²<0.5), "
         "label noise >20% destroys the quadratic form.")
-    d67good = d67 == (1.0, 0.5, 0.5)
+    d67good = d67 is None
     ok = ok and d67good
-    print(f"  [{'PASS' if d67good else 'FAIL'}] labeled-drift (#67218)     -> {d67}")
+    print(f"  [{'PASS' if d67good else 'FAIL'}] threshold no-fire (#67218) -> {d67}")
     # 58935 — refuted-prediction false-positive guard: the card QUOTES Side A's
     # rejected AUC~0.50 only to disprove it (the card's real value is 0.76). Before
     # the strip, finding auc=0.50 (first-mention) was compared against the residue's

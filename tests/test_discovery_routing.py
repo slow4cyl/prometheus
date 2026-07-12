@@ -106,3 +106,27 @@ def test_unreconciled_claims_reads_flag_and_latest_reason():
     conn.execute("INSERT INTO claim_reconciliation_reviews VALUES (7, 1, 'new reason', 2.0)")
     got = routing.unreconciled_claims(conn)
     assert got == {7: "new reason"}
+
+
+# --- spurious-support gate (2026-07-12, GPT operational-heterogeneity review) --
+
+def test_spurious_support_is_off_shelf_with_label():
+    assert routing.SPURIOUS_SUPPORT in routing.OFF_SHELF
+    assert routing.SPURIOUS_SUPPORT in routing.ROUTE_LABEL
+
+
+def test_spurious_support_claims_flags_at_and_above_ceiling():
+    import sqlite3
+    conn = sqlite3.connect(":memory:")
+    conn.execute("CREATE TABLE knowledge_claims (id INTEGER PRIMARY KEY, spurious_agreement REAL)")
+    conn.executemany("INSERT INTO knowledge_claims VALUES (?,?)",
+                     [(1, 0.68), (2, 0.60), (3, 0.59), (4, None), (5, 0.9)])
+    got = routing.spurious_support_claims(conn)
+    assert set(got) == {1, 2, 5}          # >= 0.6 only; 0.59 and NULL excluded
+    assert "0.68" in got[1] and "does not agree" in got[1]
+
+
+def test_spurious_support_claims_inert_without_column():
+    import sqlite3
+    conn = sqlite3.connect(":memory:")
+    assert routing.spurious_support_claims(conn) == {}
