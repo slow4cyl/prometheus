@@ -77,3 +77,32 @@ def test_refuted_clause_is_stripped_58935():
 
 def test_lone_integers_skipped_62239():
     assert drift("stable out to t=20000 steps", "diverges after t=8000 steps") is None
+
+
+# --- reconciliation-gate override (2026-07-12) -------------------------------
+
+def test_unreconciled_is_an_off_shelf_route_with_label():
+    assert routing.UNRECONCILED in routing.OFF_SHELF
+    assert routing.UNRECONCILED in routing.ROUTE_LABEL
+    assert routing.DISCOVERY not in routing.OFF_SHELF
+
+
+def test_unreconciled_claims_inert_without_critic_tables():
+    # The gate is {} by construction until the critic has run — a fresh DB with
+    # no scope_conflict column / reviews table must not raise or flag anything.
+    import sqlite3
+    conn = sqlite3.connect(":memory:")
+    assert routing.unreconciled_claims(conn) == {}
+
+
+def test_unreconciled_claims_reads_flag_and_latest_reason():
+    import sqlite3
+    conn = sqlite3.connect(":memory:")
+    conn.execute("CREATE TABLE knowledge_claims (id INTEGER PRIMARY KEY, scope_conflict INTEGER)")
+    conn.execute("CREATE TABLE claim_reconciliation_reviews "
+                 "(claim_id INTEGER, conflict INTEGER, reason TEXT, reviewed_at REAL)")
+    conn.execute("INSERT INTO knowledge_claims VALUES (7, 1), (8, 0), (9, NULL)")
+    conn.execute("INSERT INTO claim_reconciliation_reviews VALUES (7, 1, 'old reason', 1.0)")
+    conn.execute("INSERT INTO claim_reconciliation_reviews VALUES (7, 1, 'new reason', 2.0)")
+    got = routing.unreconciled_claims(conn)
+    assert got == {7: "new reason"}

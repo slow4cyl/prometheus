@@ -107,3 +107,27 @@ def test_world_gate_never_demotes_below_replicated():
                                   n_retests=0, n_formal_replications=0, spurious_agreement=0.0,
                                   world_refuted=1, world_gate_armed=True)
     assert r.status not in ("ESTABLISHED", "REPLICATED")
+
+
+# --- claim-reconciliation gate (2026-07-12): scope_conflict caps at CANDIDATE
+
+def test_scope_conflict_caps_at_candidate():
+    r = _establishable(scope_conflict=1)
+    assert r.status == "CANDIDATE"
+    assert "scope_conflict" in " ".join(r.failed_checks)
+    assert "unreconciled" in (r.blocking_reason or "").lower()
+
+
+def test_scope_conflict_null_and_cleared_are_inert():
+    # NULL (never reviewed) and 0 (reconciled) must be byte-identical to pre-gate.
+    assert _establishable(scope_conflict=None).status == "ESTABLISHED"
+    assert _establishable(scope_conflict=0).status == "ESTABLISHED"
+
+
+def test_scope_conflict_does_not_fire_below_candidate_band():
+    # A claim without CANDIDATE-level support has nothing to cap — falls through
+    # to the normal wsc check (mirrors circular_construction / method_code_mismatch).
+    r = maturity.compute_maturity(wsc=0.0, refute_count=0, contradiction_count=0,
+                                  n_retests=0, n_formal_replications=0,
+                                  spurious_agreement=0.0, scope_conflict=1)
+    assert r.status is None

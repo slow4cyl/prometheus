@@ -324,6 +324,7 @@ def main():
 
     cands = get_candidates(conn)
     indep = _independence_mult()   # {} until the independence gate arms; then bounded haircuts
+    unrec = routing.unreconciled_claims(conn)   # reconciliation gate ({} until critic runs)
     scored = []
     for r in cands:
         scope_txt, adv = claim_dossier_extra(conn, r["id"])
@@ -334,6 +335,11 @@ def main():
             prior_work_citation=r["prior_work_citation"] or "",
             is_empirical_fact=bool(r["is_fact"]), novelty_confidence=r["novelty_conf"],
             conf_floor=RE_AUDIT_CONF_FLOOR)
+        if r["id"] in unrec:
+            # reconciliation gate: headline and mapped scope assert different
+            # propositions — no canonical claim to shelve until arbitration
+            # reconciles them (the critic enqueues that task itself)
+            route, reason = routing.UNRECONCILED, unrec[r["id"]][:200]
         sim = routing.simulation_flag(r["novel_residue"] or "", r["claim_summary"] or "", scope_txt)
         # novelty credit: none for off-shelf or model-internal claims; the full
         # weak prior when a second family independently corroborated the absence

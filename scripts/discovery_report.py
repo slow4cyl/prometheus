@@ -131,7 +131,8 @@ def gather(conn):
     """).fetchall()
 
     shelf, bins = [], {routing.KNOWN_IN_LIT: [], routing.EMPIRICAL_FACT: [],
-                       routing.DERIVABLE: []}
+                       routing.DERIVABLE: [], routing.UNRECONCILED: []}
+    unrec = routing.unreconciled_claims(conn)   # reconciliation gate ({} until critic runs)
     for r in rows:
         cid = r["claim_id"]
         atk = dict(conn.execute(
@@ -165,6 +166,10 @@ def gather(conn):
             citations=(aud["citations"] if aud else "") or "", scope=scope_txt or "",
             adversarial_texts=adv_prose, prior_work_citation=citation,
             is_empirical_fact=bool(r["is_fact"]), novelty_confidence=r["novelty_confidence"])
+        if cid in unrec:
+            # reconciliation gate: headline and mapped scope assert different
+            # propositions — held off the shelf until arbitration reconciles them
+            route, reason = routing.UNRECONCILED, unrec[cid][:200]
 
         entry = {
             "id": cid,
@@ -534,6 +539,12 @@ _BIN_META = {
         "result, or a property of the representation (‘geometric property of TF-IDF vector "
         "space’). A theorem that survives an adversarial attack is still a theorem; "
         "robustness of a tautology is just the tautology. Routed here, off the discovery shelf."),
+    routing.UNRECONCILED: ("Unreconciled — headline contradicts mapped scope",
+        "A cross-family judge panel found this claim’s headline and its adversarially mapped "
+        "scope asserting different propositions — a reversed direction, a displaced decisive "
+        "variable, or evidence attached to a different question. A discovery record needs one "
+        "canonical claim; until an automatically enqueued arbitration reconciles the two texts, "
+        "the entry is a contested hypothesis and is held off the shelf."),
 }
 
 
@@ -550,7 +561,8 @@ def _binned_section(bins):
     if not total:
         return ""
     tables = []
-    for route in (routing.KNOWN_IN_LIT, routing.EMPIRICAL_FACT, routing.DERIVABLE):
+    for route in (routing.UNRECONCILED, routing.KNOWN_IN_LIT,
+                  routing.EMPIRICAL_FACT, routing.DERIVABLE):
         items = sorted(bins.get(route, []), key=lambda e: -(e["score"] or 0))
         if not items:
             continue
@@ -567,8 +579,9 @@ def _binned_section(bins):
         '<section><h2><span class="no">§2</span>What the router moved off the shelf</h2>'
         '<p class="sectionintro">A survivors-only shelf hides its own errors. These '
         f'{total} claims passed replication and attack — they are robust — but they are not '
-        'discoveries: each names its own prior work, is an empirical lookup, or is analytically '
-        'derivable. The signal was already in the cards; the router now reads it instead of '
+        'shelvable discoveries: each names its own prior work, is an empirical lookup, is '
+        'analytically derivable, or carries a headline its own mapped scope contradicts. The '
+        'signal was already in the cards; the router now reads it instead of '
         'ranking past it. Shown with the reason each was moved, so the filter is auditable.</p>'
         + "".join(tables) + '</section>')
 

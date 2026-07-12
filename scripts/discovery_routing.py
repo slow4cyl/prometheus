@@ -15,7 +15,10 @@ is robust AND grounded-novel AND contingent AND about-the-world. Everything here
 is deterministic and network-free: it reads the text a claim's own subsystems
 already produced (summary, novelty residue, audit citations + explanation,
 adversarial-replication prose, mapped scope, prior-work citation) and returns a
-route + a human-readable reason. No DB, no LLM.
+route + a human-readable reason. No DB, no LLM. (One deliberate exception:
+`unreconciled_claims()` reads the reconciliation critic's stored verdicts from an
+ALREADY-OPEN connection so every consumer applies the same shelf override — it
+never opens a connection and returns {} when the critic has not run.)
 
 Wire it into discovery_spotlight (persist the route) and discovery_report (rank
 only the `discovery` route; render the other bins as the filter's honest output).
@@ -36,6 +39,13 @@ call something novel) wins ties:
                     low-confidence "not found" is more likely a search miss)
   5. discovery      everything else; may carry a `sim_internal` FLAG (numbers are
                     parameter-dependent) that caps its novelty without hiding it
+
+One route is NOT produced by the cascade: `unreconciled` is a DB-driven OVERRIDE
+(claim-reconciliation gate, 2026-07-12). When claim_reconciliation_critic.py finds
+that a claim's headline and its mapped scope assert DIFFERENT propositions
+(#64355: headline "7 unique optimal LRs" vs scope "ALL ranks share optimal
+LR=0.1"), there is no single canonical claim to shelve — consumers override the
+cascade's route with UNRECONCILED until arbitration reconciles the texts.
 """
 import re
 
@@ -45,6 +55,7 @@ KNOWN_IN_LIT = "known_in_lit"
 EMPIRICAL_FACT = "empirical_fact"
 DERIVABLE = "derivable"
 SEARCH_MISS = "search_miss"
+UNRECONCILED = "unreconciled"     # override, not a cascade outcome — see docstring
 
 ROUTE_LABEL = {
     DISCOVERY: "candidate discovery",
@@ -52,9 +63,30 @@ ROUTE_LABEL = {
     EMPIRICAL_FACT: "empirical-fact lookup",
     DERIVABLE: "derivable — analytic / definitional",
     SEARCH_MISS: "likely search miss",
+    UNRECONCILED: "unreconciled — headline contradicts mapped scope",
 }
 # routes that are kept OFF the discovery shelf
-OFF_SHELF = frozenset({KNOWN_IN_LIT, EMPIRICAL_FACT, DERIVABLE, SEARCH_MISS})
+OFF_SHELF = frozenset({KNOWN_IN_LIT, EMPIRICAL_FACT, DERIVABLE, SEARCH_MISS,
+                       UNRECONCILED})
+
+
+def unreconciled_claims(conn):
+    """{claim_id: reason} for claims the reconciliation critic flagged
+    (knowledge_claims.scope_conflict = 1): headline and mapped scope assert
+    different propositions, so no canonical claim exists to put on a shelf.
+    Both shelf consumers call this and override the cascade route with
+    UNRECONCILED for these ids — one gate, applied identically in the spotlight
+    and the report. Returns {} when the critic has never run (column/table
+    absent) — the gate is inert by construction until the first verdict lands."""
+    try:
+        return {r[0]: (r[1] or "headline contradicts mapped scope")
+                for r in conn.execute("""
+            SELECT kc.id, (SELECT rr.reason FROM claim_reconciliation_reviews rr
+                           WHERE rr.claim_id = kc.id AND rr.conflict = 1
+                           ORDER BY rr.reviewed_at DESC LIMIT 1)
+            FROM knowledge_claims kc WHERE kc.scope_conflict = 1""")}
+    except Exception:
+        return {}
 
 # ---- publication identifiers ---------------------------------------------
 # a claim whose own evidence names one of these has a published referent
