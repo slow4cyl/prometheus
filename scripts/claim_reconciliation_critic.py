@@ -104,12 +104,23 @@ def fingerprint(headline, scope_rows):
     return hashlib.md5(f"{h}|{ids}|{len(scope_rows)}".encode()).hexdigest()
 
 
+REREVIEW_COOLDOWN_S = 6 * 3600   # damp scope-churn re-reviews (see below)
+
+
 def get_candidates(conn, limit, only_claim=None, scan_budget_s=60):
     """Shelf-band claims with at least one mapped scope: everything on the
     discovery ledger first (the public face), then REPLICATED/ESTABLISHED by
     support depth. The seen-set is (claim_id, fingerprint) — NOT a scope_conflict
     IS NULL filter — so reviewed claims re-enter whenever their headline or scope
-    set changes (never a resting tier)."""
+    set changes (never a resting tier).
+
+    Starvation guard (2026-07-12): NEVER-REVIEWED claims take the whole limit
+    before any re-review runs. Without this, a scope-churning ledger claim
+    re-queues at the FRONT on every fingerprint change (#67218 was re-judged
+    3x in one day while ~250 claims had never been judged once). Re-reviews
+    also get a cooldown so a claim gathering scope cards is judged at most
+    once per REREVIEW_COOLDOWN_S — the fingerprint keeps it queued, the
+    cooldown just spaces the spend."""
     deadline = time.time() + scan_budget_s
     where_claim = f"AND kc.id = {int(only_claim)}" if only_claim else ""
     rows = conn.execute(f"""
@@ -134,11 +145,23 @@ def get_candidates(conn, limit, only_claim=None, scan_budget_s=60):
     seen = set(conn.execute(
         "SELECT claim_id, evidence_fingerprint FROM claim_reconciliation_reviews "
         "WHERE conflict IS NOT NULL"))
-    out = []
+    last_review = dict(conn.execute(
+        "SELECT claim_id, MAX(reviewed_at) FROM claim_reconciliation_reviews "
+        "GROUP BY claim_id"))
+    now = time.time()
+    fresh, rereview = [], []
     for row in rows:
         if time.time() > deadline:
-            print(f"  [scan budget hit — reviewing {len(out)} collected candidates]")
+            print(f"  [scan budget hit — reviewing what was collected]")
             break
+        if len(fresh) >= limit:
+            break
+        prev = last_review.get(row["id"])
+        if prev is not None and not only_claim:
+            if now - prev < REREVIEW_COOLDOWN_S:
+                continue                      # churn-damped; re-queues after cooldown
+            if len(rereview) >= limit:
+                continue                      # enough re-review backfill already
         scopes = conn.execute(
             "SELECT id, scope_text FROM claim_scopes WHERE claim_id = ? "
             "ORDER BY id DESC LIMIT ?", (row["id"], MAX_SCOPES)).fetchall()
@@ -148,9 +171,12 @@ def get_candidates(conn, limit, only_claim=None, scan_budget_s=60):
         fp = fingerprint(headline, scopes)
         if (row["id"], fp) in seen and not only_claim:
             continue
-        out.append({"claim": row, "scopes": scopes, "fingerprint": fp})
-        if len(out) >= limit:
-            break
+        item = {"claim": row, "scopes": scopes, "fingerprint": fp}
+        (rereview if prev is not None and not only_claim else fresh).append(item)
+    out = (fresh + rereview)[:limit]
+    if rereview and fresh:
+        print(f"  [queue: {len(fresh)} never-reviewed first, "
+              f"{max(0, limit - len(fresh))} re-review slot(s)]")
     return out
 
 
