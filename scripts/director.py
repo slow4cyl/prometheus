@@ -37,7 +37,7 @@ def get_blocked_tasks():
         if has_task_events:
             try:
                 reason_row = conn.execute(
-                    "SELECT payload FROM task_events WHERE task_id=? AND event_type='blocked' ORDER BY created_at DESC LIMIT 1",
+                    "SELECT payload FROM task_events WHERE task_id=? AND kind='blocked' ORDER BY created_at DESC LIMIT 1",
                     (tid,)
                 ).fetchone()
                 reason = reason_row[0] if reason_row else "unknown"

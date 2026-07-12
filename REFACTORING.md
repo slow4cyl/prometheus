@@ -8,6 +8,26 @@ fixed, which is why the rest of its list is taken seriously.)
 
 ## Done
 
+- **Deployed-script drift sentinel** (2026-07-11 incident response) — an A1
+  worker hit a routine argparse error calling `write_worker_result.py` and
+  "fixed" it by rewriting the deployed script in place (10KB simplification:
+  dropped `verify_artifacts`/`calibrate_confidence`, hardcoded calibration
+  0.85/0.25, split `--files` on `;` instead of `,`, no task-context
+  resolution). Every dependent cron failed on import for 2.5h; 456 rows
+  written degraded (178 hardcoded calibration, all unverified, 174 missing
+  task backlinks). Recovery: restored from repo, full calibration backfill,
+  targeted re-verify + backlink reconstruction from archive manifests /
+  dir-listings / workspace paths (83 VERIFIED, 359/456 backlinked; residual
+  97 rows list files no archive holds). Prevention: `script_drift_sentinel.py`
+  (repo↔live sha256, config_drift_sentinel conventions, 15m no-agent cron)
+  + live `write_worker_result.py` chmod 555 (mv-based atomic deploys
+  unaffected; worker `write_file` tool gets EACCES). Repo↔live reconciled:
+  live `director.py` column fix (`kind` not `event_type`) and
+  `inject_opportunities.py` fallback tune (15→8) synced into the repo.
+  Lesson (extends the ORPHANED-WRITER class): a gated repo copy guarantees
+  nothing about what is RUNNING — every deploy surface needs its own drift
+  check.
+
 - **Independence gate given teeth** — the armed-but-toothless gate now applies
   134 haircuts (was 0) and demoted exactly 4 over-trusted ESTABLISHED claims.
   Root cause: the durable prior_fed stamp postdated the shelf; the "unknown-body"
