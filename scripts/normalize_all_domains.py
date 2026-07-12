@@ -121,13 +121,17 @@ def main():
     print(f"Worker results updated: {updated_wr}/{total_wr}")
     print(f"Worker results with empty domain (left for embedding classifier): {empty_count}")
 
-    # --- Step 5: Rebuild domains table ---
-    # Drop all entries, rebuild from experiment domains ONLY
-    # (worker_results has one-off domain strings that shouldn't be canonical)
-    c.execute("DELETE FROM domains")
-
-    # Get domain counts from experiments only (post-normalization)
-    # Skip NULL/empty domain strings — they cause NOT NULL constraint failures
+    # --- Step 5: Rebuild domains table (id-preserving upsert) ---
+    # 2026-07-12: was `DELETE FROM domains` + re-INSERT. Under AUTOINCREMENT
+    # that handed every rebuilt row a FRESH id on each 15-minute run (the seq
+    # burned past 1.14M) and silently orphaned every integer-FK child — the
+    # Domains-view 0-topics/0-gaps incident (subtopics/gaps pointed at ids
+    # 1-11, domains lived at 1.14M+). Upsert by name instead: ids and
+    # created_at are stable across runs, only confidence/updated_at move, and
+    # canonical names that vanished from experiments are deleted — the same
+    # end-state as the old rebuild, minus the id churn.
+    # Rebuild from experiment domains ONLY (worker_results has one-off domain
+    # strings that shouldn't be canonical); skip NULL/empty domain strings.
     c.execute("SELECT domain, COUNT(*) as cnt FROM experiments WHERE domain IS NOT NULL AND domain != '' GROUP BY domain ORDER BY cnt DESC")
     exp_domains = c.fetchall()
 
@@ -136,12 +140,24 @@ def main():
     for domain, cnt in exp_domains:
         # Confidence based on experiment count (more experiments = higher confidence)
         confidence = min(0.5 + cnt / 2000.0, 0.95)
-        c.execute("INSERT INTO domains (name, confidence, created_at, updated_at) VALUES (?, ?, ?, ?)",
-                  (domain, confidence, now, now))
+        c.execute(
+            """INSERT INTO domains (name, confidence, created_at, updated_at)
+               VALUES (?, ?, ?, ?)
+               ON CONFLICT(name) DO UPDATE SET
+                   confidence = excluded.confidence,
+                   updated_at = excluded.updated_at""",
+            (domain, confidence, now, now))
+
+    keep = [d for d, _ in exp_domains]
+    if keep:
+        placeholders = ",".join("?" * len(keep))
+        c.execute(f"DELETE FROM domains WHERE name NOT IN ({placeholders})", keep)
+    else:
+        c.execute("DELETE FROM domains")
 
     c.execute("SELECT COUNT(*) FROM domains")
     new_domain_count = c.fetchone()[0]
-    print(f"\nDomains table rebuilt: {new_domain_count} entries")
+    print(f"\nDomains table rebuilt: {new_domain_count} entries (ids preserved)")
 
     # --- Step 6: Report remaining non-canonical ---
     c.execute("SELECT domain, COUNT(*) FROM experiments GROUP BY domain")
