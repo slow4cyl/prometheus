@@ -116,6 +116,7 @@ def compute_maturity(
     circular_construction: int = None,
     method_code_mismatch: int = None,
     scope_conflict: int = None,
+    mechanism_unsupported: int = None,
     n_break_survivals: int = 0,
     n_blind_supports: int = 0,
     n_stamped_supports: int = 0,
@@ -197,6 +198,22 @@ def compute_maturity(
             passed_checks=[f"wsc={wsc:.1f} >= {t['candidate_wsc']}"],
             failed_checks=["scope_conflict = 1 (headline contradicts mapped scope)"],
             blocking_reason="unreconciled headline/scope conflict — capped at CANDIDATE",
+        )
+
+    # --- MECHANISM CONTRADICTED: caps at CANDIDATE (2026-07-12) ---
+    # mechanism_evidence_critic.py sets mechanism_unsupported = 1 ONLY when a
+    # judge majority finds the claim's own numbers cut AGAINST its stated
+    # WHY-IT-WORKS story (mediator doesn't move, sign reversed, internal
+    # control refutes it) — never for the common, honest ASSOCIATION_ONLY
+    # case where the mechanism is simply an untested candidate explanation.
+    # A tier certifies the claim WITH its stated mechanism; a story the
+    # claim's own evidence contradicts stays CANDIDATE until rewritten.
+    if mechanism_unsupported == 1 and wsc >= t["candidate_wsc"]:
+        return MaturityResult(
+            status="CANDIDATE",
+            passed_checks=[f"wsc={wsc:.1f} >= {t['candidate_wsc']}"],
+            failed_checks=["mechanism_unsupported = 1 (evidence contradicts stated mechanism)"],
+            blocking_reason="stated mechanism contradicted by own evidence — capped at CANDIDATE",
         )
 
     # --- Evaluate all checks bottom-up ---
@@ -507,6 +524,8 @@ def recompute_all_maturity(conn, dry_run=False, verbose=False):
             conn.execute("ALTER TABLE knowledge_claims ADD COLUMN method_code_mismatch INTEGER")
         if "scope_conflict" not in cols:
             conn.execute("ALTER TABLE knowledge_claims ADD COLUMN scope_conflict INTEGER")
+        if "mechanism_unsupported" not in cols:
+            conn.execute("ALTER TABLE knowledge_claims ADD COLUMN mechanism_unsupported INTEGER")
         conn.execute("""
             CREATE TABLE IF NOT EXISTS adversarial_replications (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -583,6 +602,7 @@ def recompute_all_maturity(conn, dry_run=False, verbose=False):
                circular_construction,
                method_code_mismatch,
                scope_conflict,
+               mechanism_unsupported,
                COALESCE((SELECT COUNT(*) FROM adversarial_replications ar
                          WHERE ar.claim_id = knowledge_claims.id
                            AND ar.status = 'survived'), 0) as n_break_survivals,
@@ -642,6 +662,7 @@ def recompute_all_maturity(conn, dry_run=False, verbose=False):
             circular_construction=row["circular_construction"],
             method_code_mismatch=row["method_code_mismatch"],
             scope_conflict=row["scope_conflict"],
+            mechanism_unsupported=row["mechanism_unsupported"],
             n_break_survivals=row["n_break_survivals"],
             n_blind_supports=row["n_blind_supports"],
             n_stamped_supports=row["n_stamped_supports"],

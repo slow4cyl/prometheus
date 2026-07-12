@@ -131,3 +131,18 @@ def test_scope_conflict_does_not_fire_below_candidate_band():
                                   n_retests=0, n_formal_replications=0,
                                   spurious_agreement=0.0, scope_conflict=1)
     assert r.status is None
+
+
+# --- mechanism-evidence gate (2026-07-12): only CONTRADICTED caps ------------
+
+def test_mechanism_unsupported_caps_at_candidate():
+    r = _establishable(mechanism_unsupported=1)
+    assert r.status == "CANDIDATE"
+    assert "mechanism_unsupported" in " ".join(r.failed_checks)
+
+
+def test_mechanism_unsupported_null_and_zero_are_inert():
+    # NULL (unreviewed) and 0 (evidenced or association-only) are byte-identical
+    # to pre-gate — ASSOCIATION_ONLY must never cap honest untested stories.
+    assert _establishable(mechanism_unsupported=None).status == "ESTABLISHED"
+    assert _establishable(mechanism_unsupported=0).status == "ESTABLISHED"
