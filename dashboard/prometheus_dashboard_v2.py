@@ -747,21 +747,45 @@ def get_claims_detail():
     }
 
 
+# Generic pseudo-experiment ids that thousands of curiosities share; each lumps
+# onto whatever single domain its placeholder experiment row carries, which would
+# drown out real per-domain counts (e.g. 'synthesis' alone maps 184k curiosities
+# onto cross_domain_prediction). Excluded from the topic/gap attribution below.
+_GENERIC_CURIOSITY_SOURCES = ("synthesis", "refutation_boost", "compression_synthesis", "moderate_success", "")
+
 def get_domains():
     db = get_db()
+    # topics/gaps used to read the subtopics/gaps tables, but those were seeded
+    # once (2026-05-31 from self_state.json) and orphaned the day
+    # normalize_all_domains.py rebuilt the domains table with fresh AUTOINCREMENT
+    # ids — no live producer ever repopulated them, so every domain read 0/0.
+    # Live source instead: curiosities (the system's open research questions),
+    # attributed to a domain via source_experiment -> experiments.domain.
+    # topics = distinct root threads (lines of inquiry); gaps = active (open) ones.
+    per_domain = {}
+    for r in db.execute("""
+        SELECT e.domain AS domain,
+               SUM(CASE WHEN c.status='active' THEN 1 ELSE 0 END) AS open_gaps,
+               SUM(CASE WHEN c.parent_curiosity_id IS NULL THEN 1 ELSE 0 END) AS topics
+        FROM curiosities c JOIN experiments e ON e.id = c.source_experiment
+        WHERE c.source_experiment NOT IN (?, ?, ?, ?, ?)
+          AND c.source_experiment NOT LIKE 'opportunity_injection%'
+        GROUP BY e.domain
+    """, _GENERIC_CURIOSITY_SOURCES).fetchall():
+        per_domain[r["domain"]] = (r["topics"] or 0, r["open_gaps"] or 0)
+
     domains = db.execute("""
         SELECT d.name, d.confidence, d.id,
-          (SELECT COUNT(*) FROM experiments e WHERE e.domain = d.name) AS exp_count,
-          (SELECT COUNT(*) FROM subtopics s WHERE s.domain_id = d.id) AS topic_count,
-          (SELECT COUNT(*) FROM gaps g WHERE g.domain_id = d.id AND g.status='open') AS gap_count
+          (SELECT COUNT(*) FROM experiments e WHERE e.domain = d.name) AS exp_count
         FROM domains d ORDER BY exp_count DESC, d.confidence DESC
     """).fetchall()
     tiers = {"mastery": [], "emerging": [], "long_tail": []}
     scatter = []
     for d in domains:
         ec = d["exp_count"] or 0
+        topic_count, gap_count = per_domain.get(d["name"], (0, 0))
         entry = {"name": (d["name"] or "").replace("_", " "), "confidence": d["confidence"],
-                 "exp_count": ec, "topics": d["topic_count"] or 0, "gaps": d["gap_count"] or 0}
+                 "exp_count": ec, "topics": topic_count, "gaps": gap_count}
         # log-scale tiers — at ~129k experiments the old 5/2/1 cutoffs put every
         # domain in "mastery" and left two panels permanently empty
         if ec >= 1000:
@@ -772,7 +796,7 @@ def get_domains():
             tiers["long_tail"].append(entry)
         if ec > 0:
             scatter.append({"x": ec, "y": round((d["confidence"] or 0.5) * 100),
-                            "r": min(max(int(math.sqrt(d["topic_count"] or 0) * 2), 3), 22),
+                            "r": min(max(int(3 + math.log10(topic_count + 1) * 5), 3), 22),
                             "label": entry["name"][:24]})
     db.close()
     scatter.sort(key=lambda b: b["x"], reverse=True)
