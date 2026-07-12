@@ -286,7 +286,12 @@ def main():
             failed += 1
             print(f"  claim {claim['id']}: split FAILED (no parseable proposal/verdict)")
 
-        if not args.dry_run:
+        if not args.dry_run and verdict != "failed":
+            # 'failed' = a transient LLM parse/timeout, NOT a judgment about the
+            # claim — ledgering it would make one flaky call permanent (the
+            # UNIQUE key blocks retries; observed 5 failed vs 5 split on day
+            # one). Leave no row so the next cron tick retries naturally;
+            # only real verdicts (split/unsplittable) are one-shot.
             conn.execute(
                 "INSERT OR REPLACE INTO claim_splits (parent_claim_id, created_at, status, "
                 "n_subclaims, subclaims_json, curiosity_ids, skeptic_confidence, reason) "
