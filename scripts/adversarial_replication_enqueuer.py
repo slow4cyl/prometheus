@@ -169,9 +169,17 @@ def pick_attacker(conn, claim_id, forced=None, reliable_only=False):
     bypassing the independence gate entirely — deepseek was re-examining claims
     its own survived attacks corroborated, and A1 (40-weight co-primary) got
     exactly zero targeted picks. Fallback order when independence excludes the
-    whole restricted pool: free-tier families that don't back the claim (an
-    independent flaky attacker beats a reliable self-grading one), then any
-    non-mimo pool entry as the last resort.
+    whole restricted pool: free-tier families that don't back the claim get ONE
+    shot (an independent flaky attacker beats a reliable self-grading one) —
+    but only one. Measured 2026-07-12 over 48h of targeted cards: reliable
+    attackers completed 22/23 while free-tier completed 0/3 — every free card
+    died in ~20s (clean exit, no terminal kanban call) and auto-blocked after
+    3 protocol violations, so a doubly-excluded claim rotated through dead
+    free endpoints forever and its targeted challenge NEVER ran. Once ANY
+    targeted attempt on the claim has died unresolved (status='expired'), a
+    REPEAT reliable attacker is used instead: reduced attacker-diversity, but
+    still cross-family vs the mimo support fleet, and the challenge actually
+    runs. Then any non-mimo pool entry as the last resort.
     """
     if forced:
         return forced
@@ -183,6 +191,12 @@ def pick_attacker(conn, claim_id, forced=None, reliable_only=False):
     if not eligible and reliable_only:  # restricted pool fully excluded — widen to independent free tier
         eligible = [(s, w) for s, w in ATTACKER_POOL
                     if ATTACKER_FAMILY.get(s, s) not in excluded]
+        if eligible:
+            dead_tries = conn.execute(
+                "SELECT COUNT(*) AS c FROM adversarial_replications "
+                "WHERE claim_id=? AND status='expired'", (claim_id,)).fetchone()["c"]
+            if dead_tries:   # the flaky tier already burned its shot — repeat a reliable
+                eligible = [(s, w) for s, w in ATTACKER_POOL if s in RELIABLE_ATTACKERS]
     if not eligible:  # every pool family already touched it — drop only the worker family
         eligible = [(s, w) for s, w in ATTACKER_POOL if ATTACKER_FAMILY.get(s, s) != "mimo"]
     attempt = conn.execute(
