@@ -233,6 +233,7 @@ def parse_review(text):
 
 VOTES = 3   # majority vote — the reasoning judge is non-deterministic (flip-flops
             # + intermittent unparseable output); one call can't be trusted to gate.
+VOTE_WORST = 130   # worst-case wall time of one call_llm (60s + retry + slack)
 
 
 def judge(prompt, deadline=None):
@@ -241,15 +242,16 @@ def judge(prompt, deadline=None):
     mismatch at conf >= FLAG_CONFIDENCE — one bad run can never cap a claim. Returns
     {mismatch, confidence, reason, votes} or None if a quorum (>=2) never parsed.
 
-    deadline (2026-07-09): hard wall-clock cutoff. One judge() could run
-    5 votes x 60s-timeout calls (~325s) and blow the 300s cron budget solo
-    when the endpoint is slow (observed: 13s for a trivial call). Voting
-    stops at the deadline; quorum logic unchanged (>=2 parseable or None)."""
+    deadline (2026-07-09, hardened 2026-07-12): hard wall-clock cutoff. The
+    original check only ran BETWEEN votes, so an in-flight call could run
+    ~125s past it — on a slow-endpoint day (repeated read timeouts) the cron
+    killed this critic at 300s (13:32 error). A vote may not START inside the
+    last VOTE_WORST seconds of the deadline, which makes the deadline real."""
     verdicts = []
     for _ in range(VOTES + 2):              # a couple of extra tries to reach quorum
         if len(verdicts) >= VOTES:
             break
-        if deadline is not None and time.time() > deadline:
+        if deadline is not None and time.time() > deadline - VOTE_WORST:
             break
         v = parse_review(call_llm(prompt, max_tokens=1600))
         if v is not None:
@@ -285,15 +287,16 @@ def main():
     flagged = aligned = failed = 0
     t0 = time.time()
     for c in cands:
-        # Start-cutoff 150s + a hard 270s deadline threaded into judge(): a
-        # claim started late gets a truncated vote (quorum >=2 still applies)
-        # instead of overrunning the 300s cron kill (2026-07-09).
-        if time.time() - t0 > 150:
+        # Start-cutoff 110s + a 250s deadline threaded into judge() (2026-07-12:
+        # was 150/270, but the deadline was advisory — in-flight calls overran
+        # it and the cron killed the run at 300s; see judge()). A claim started
+        # late gets a truncated vote (quorum >=2 still applies).
+        if time.time() - t0 > 110:
             print("  wall budget reached — deferring remaining claims")
             break
         claim = c["claim"]
         method_text = (claim["claim_summary"] or claim["hypothesis_text"] or "")[:1400]
-        review = judge(build_prompt(method_text, c["exps"]), deadline=t0 + 270)
+        review = judge(build_prompt(method_text, c["exps"]), deadline=t0 + 250)
         code_seen = len(c["exps"])
         if review is None:
             failed += 1
