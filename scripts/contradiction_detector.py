@@ -457,6 +457,10 @@ _ARTIFACT_STATUS_NORMALIZATIONS = {
     'MISSING': 'FILES_MISSING', 'missing': 'FILES_MISSING',
     'completed': 'UNVERIFIED', 'NOT_VERIFIED': 'UNVERIFIED',
     '': 'UNVERIFIED',
+    # 2026-07-12: stragglers found in audit. PASSED mirrors PASS (an assertion
+    # the gate's checks passed); SUCCESS is a task-status leak like 'completed'
+    # — the worker finished, nothing was gate-verified.
+    'PASSED': 'VERIFIED', 'SUCCESS': 'UNVERIFIED',
 }
 
 
