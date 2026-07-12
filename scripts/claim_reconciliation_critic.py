@@ -56,6 +56,16 @@ SCOPE_CHARS = 900         # per scope card
 HEADLINE_CHARS = 1400
 FLAG_CONFIDENCE = 0.7     # critic confidence required for a conflict vote to count
 VOTES = 3                 # majority vote — single reasoning-judge calls flip-flop
+# Budget envelope vs the 300s cron kill (first cron fire was killed at 300s:
+# a 5-vote escalation plus the post-judging enqueue subprocess overran the
+# template's 150/270 budgets). A vote's worst case is ~125s (60s call + retry),
+# so votes may not START inside the last VOTE_WORST seconds of the deadline —
+# that makes the deadline real instead of advisory.
+CLAIM_CUTOFF = 110        # no NEW claim after this many seconds
+RUN_DEADLINE = 250        # votes must END by t0 + this
+VOTE_WORST = 130          # worst-case wall time of one judge call
+ENQUEUE_CUTOFF = 230      # no enqueue subprocess STARTED after t0 + this
+ENQUEUE_TIMEOUT = 60      # the enqueuer inserts a kanban row; seconds, not minutes
 ENQUEUER = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                         "adversarial_replication_enqueuer.py")
 
@@ -228,7 +238,9 @@ def judge(prompt, deadline=None):
     target = VOTES
     attempts = 0
     while attempts < target + 3 and len(verdicts) < target:
-        if deadline is not None and time.time() > deadline:
+        # don't START a vote that can't finish inside the deadline — an
+        # in-flight call_llm can run ~125s past an advisory check
+        if deadline is not None and time.time() > deadline - VOTE_WORST:
             break
         attempts += 1
         v = parse_review(call_llm(prompt, max_tokens=1600))
@@ -275,11 +287,51 @@ def enqueue_reconciliation(claim_id, note):
     a live attack on the claim. Returns (task_id_or_None, already_live)."""
     res = subprocess.run([sys.executable, ENQUEUER, "--claim", str(claim_id),
                           "--note", note],
-                         capture_output=True, text=True, timeout=180)
+                         capture_output=True, text=True, timeout=ENQUEUE_TIMEOUT)
     task = re.search(r"t_[a-f0-9]+", res.stdout or "")
     live = "already has a live attack" in (res.stdout or "")
     ok = res.returncode == 0 and not live
     return (task.group(0) if (task and ok) else None), live
+
+
+def retry_unenqueued(conn, budget, t0):
+    """Heal conflicts whose arbitration never got enqueued — a prior run hit its
+    wall budget at the enqueue step, or the enqueuer failed. Cheapest work in the
+    run, so it goes first. The enqueuer dedups against a live attack; when one
+    exists the review is stamped 'live' so it stops retrying."""
+    if budget <= 0:
+        return 0
+    rows = conn.execute("""
+        SELECT rr.id, rr.claim_id, rr.reason FROM claim_reconciliation_reviews rr
+        WHERE rr.conflict = 1 AND rr.enqueued_task IS NULL
+          AND rr.id = (SELECT MAX(r2.id) FROM claim_reconciliation_reviews r2
+                       WHERE r2.claim_id = rr.claim_id)
+          AND (SELECT kc.scope_conflict FROM knowledge_claims kc
+               WHERE kc.id = rr.claim_id) = 1
+        LIMIT 6""").fetchall()
+    healed = 0
+    for r in rows:
+        if healed >= budget or time.time() - t0 > 60:
+            break
+        claim = conn.execute("SELECT claim_summary, hypothesis_text FROM knowledge_claims "
+                             "WHERE id = ?", (r["claim_id"],)).fetchone()
+        scope = conn.execute("SELECT scope_text FROM claim_scopes WHERE claim_id = ? "
+                             "ORDER BY id DESC LIMIT 1", (r["claim_id"],)).fetchone()
+        note = build_note(r["claim_id"],
+                          (claim["claim_summary"] or claim["hypothesis_text"] or ""),
+                          scope["scope_text"] if scope else "", r["reason"] or "")
+        task_id, live = enqueue_reconciliation(r["claim_id"], note)
+        if task_id:
+            conn.execute("UPDATE claim_reconciliation_reviews SET enqueued_task = ? "
+                         "WHERE id = ?", (task_id, r["id"]))
+            conn.commit()
+            healed += 1
+            print(f"  healed missing arbitration for claim {r['claim_id']} ({task_id})")
+        elif live:
+            conn.execute("UPDATE claim_reconciliation_reviews SET enqueued_task = 'live' "
+                         "WHERE id = ?", (r["id"],))
+            conn.commit()
+    return healed
 
 
 def main():
@@ -301,16 +353,15 @@ def main():
         conn.close()
         return 0
 
-    flagged = reconciled = failed = enqueued = 0
+    flagged = reconciled = failed = 0
     t0 = time.time()
+    enqueued = 0 if args.dry_run else retry_unenqueued(conn, args.max_enqueue, t0)
     for c in cands:
-        # same wall budgets as the method-code critic: no new claim after 150s,
-        # votes stop at 270s — a slow judge never overruns the cron kill.
-        if time.time() - t0 > 150:
+        if time.time() - t0 > CLAIM_CUTOFF:
             print("  wall budget reached — deferring remaining claims")
             break
         claim = c["claim"]
-        review = judge(build_prompt(claim, c["scopes"]), deadline=t0 + 270)
+        review = judge(build_prompt(claim, c["scopes"]), deadline=t0 + RUN_DEADLINE)
         task_id = None
         if review is None:
             failed += 1
@@ -324,7 +375,8 @@ def main():
                   f"{review['conflict_type']}/{review['axis']} "
                   f"(conf={review['confidence']:.2f}, votes={review['votes']}): "
                   f"{review['reason'][:240]}")
-            if not args.dry_run and enqueued < args.max_enqueue:
+            if (not args.dry_run and enqueued < args.max_enqueue
+                    and time.time() - t0 <= ENQUEUE_CUTOFF):
                 headline = (claim["claim_summary"] or claim["hypothesis_text"] or "")
                 note = build_note(claim["id"], headline,
                                   c["scopes"][0]["scope_text"] or "", review["reason"])
