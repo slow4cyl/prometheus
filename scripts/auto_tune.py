@@ -371,20 +371,19 @@ def adjust_scorer_outcome_bonus(new_weight):
 
 
 def adjust_injection_rate(new_rate):
-    """Adjust the injection count in inject_opportunities.py."""
-    inject_path = HERMES / "scripts" / "inject_opportunities.py"
-    if not inject_path.exists():
-        return False
-    
-    content = inject_path.read_text()
-    old_pattern = r'count = \d+'
-    new_value = f'count = {new_rate}'
-    
-    if re.search(old_pattern, content):
-        content = re.sub(old_pattern, new_value, content, count=1)
-        inject_path.write_text(content)
-        return True
-    return False
+    """RETIRED source-patcher (2026-07-12) — now a no-op kept for call-site
+    compatibility. This used to regex-rewrite the `count = N` fallback literal
+    inside inject_opportunities.py on every retune. That write was (a)
+    dead-effect — inject_opportunities reads injection_rate from
+    auto_tune_state.json and touches the literal only when the state file is
+    missing/corrupt — and (b) broke script_drift_sentinel's repo<->live
+    contract on every retune (three false alarms on 2026-07-12 alone: the
+    sentinel exists to catch WORKER-CLOBBER rewrites, and a guard that cries
+    wolf every 30 minutes trains its operator to ignore it). Every caller
+    already does state["injection_rate"] = new_rate — the one channel the
+    reader uses — so the tune still lands; the fallback literal is now a
+    stable constant owned by the repo, as a fallback should be."""
+    return True
 
 
 def detect_ceiling_trap_pattern(adjustments):

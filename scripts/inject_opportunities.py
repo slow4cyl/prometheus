@@ -67,7 +67,7 @@ AUTO_TUNE_STATE = os.path.join(HERMES, "auto_tune_state.json")
 def main():
     # Read injection rate from auto_tune state (auto-tune adjusts this)
     # Falls back to --count CLI arg, then to default of 5
-    count = 10  # default fallback
+    count = 11  # default fallback
     try:
         with open(AUTO_TUNE_STATE) as f:
             tune_state = json.load(f)
