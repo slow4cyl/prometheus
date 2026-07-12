@@ -269,7 +269,60 @@ def expire_stale(conn, dry_run):
                 (time.time(), row["id"]))
     if stale and not dry_run:
         conn.commit()
-    return len(stale)
+    return len(stale) + expire_dead_tasks(conn, dry_run)
+
+
+def expire_dead_tasks(conn, dry_run):
+    """Expire pending rows whose kanban task is already DEAD — blocked (3
+    protocol violations -> gave_up), archived unresolved, janitor-closed as a
+    zombie ('JANITOR:' result, no worker_result ever written), or deleted.
+    Without this a dead card held its claim's 'pending' slot for the full
+    EXPIRE_HOURS window, so the pick_attacker one-free-shot fallback could not
+    fire for ~2 days (observed 2026-07-12: #67393's arbitration auto-blocked
+    in minutes, then sat). A 'done' task with a real result is left alone —
+    resolution lag is the reconcile lane's business, not expiry's."""
+    pending = conn.execute(
+        "SELECT id, claim_id, kanban_task_id FROM adversarial_replications "
+        "WHERE status = 'pending' AND kanban_task_id IS NOT NULL").fetchall()
+    if not pending:
+        return 0
+    try:
+        k = sqlite3.connect(f"file:{KANBAN_DB}?mode=ro", uri=True, timeout=10)
+        k.row_factory = sqlite3.Row
+    except Exception:
+        return 0
+    expired = 0
+    for row in pending:
+        tid = row["kanban_task_id"]
+        try:
+            t = k.execute("SELECT status, result FROM tasks WHERE id=?", (tid,)).fetchone()
+            if t is None:
+                t = k.execute("SELECT status, result FROM archived_tasks WHERE id=?",
+                              (tid,)).fetchone()
+        except Exception:
+            continue
+        dead = (
+            t is None
+            or t["status"] in ("blocked", "archived")
+            or (t["status"] == "done" and (t["result"] or "").startswith("JANITOR:")
+                and not conn.execute(
+                    "SELECT 1 FROM worker_results WHERE kanban_task_id=? LIMIT 1",
+                    (tid,)).fetchone())
+        )
+        if not dead:
+            continue
+        why = "task missing" if t is None else f"task {t['status']}"
+        print(f"  expiring dead-task attack #{row['id']} (claim {row['claim_id']}, {why})")
+        if not dry_run:
+            conn.execute(
+                "UPDATE adversarial_replications SET status='expired', resolved_at=?, "
+                "notes=? WHERE id=?",
+                (time.time(), f"worker card died ({why}) — expired for re-pick", row["id"]))
+        expired += 1
+    k.close()
+    if expired and not dry_run:
+        conn.commit()
+    return expired
 
 
 def adv_exp_id(claim_id):
@@ -394,6 +447,43 @@ can route the outcome)
 """
 
 
+SHAPE_ARM_FILE = os.path.expanduser("~/.hermes/shape_attack_priority_armed.json")
+_SHAPE_MIN_N = 200          # mirrors score_curiosities SHAPE_MIN_N
+_SHAPE_MIN_GAP_PP = 3.0     # mirrors score_curiosities SHAPE_MIN_GAP_PP
+
+
+def _overtrusted_shapes():
+    """Mechanism shapes the fleet measurably over-trusts, from the same
+    mechanism_calibration.json + floors the curiosity scorer already consumes
+    (n >= 200, confirm-rate gap >= 3pp below overall). mechanism_calibration.py
+    states a dual intent — discount confirm-lane priority AND give these
+    questions harder scrutiny — but only the discount half was ever wired
+    (found 2026-07-12, mechanism-certainty assessment). This is the scrutiny
+    half. Best-effort: missing file -> empty set (lane behaves as before)."""
+    try:
+        with open(os.path.expanduser("~/.hermes/mechanism_calibration.json")) as f:
+            d = json.load(f)
+        out = set()
+        for cls, st in (d.get("by_mechanism") or {}).items():
+            if (st.get("n") or 0) < _SHAPE_MIN_N:
+                continue
+            if -(st.get("vs_overall_pp") or 0.0) >= _SHAPE_MIN_GAP_PP:
+                out.add(cls)
+        return out
+    except Exception:
+        return set()
+
+
+def _shape_priority_armed():
+    """Arm-file pattern (world-gate precedent): byte-identical to the old lane
+    until an operator arms it after a dry-run comparison."""
+    try:
+        with open(SHAPE_ARM_FILE) as f:
+            return bool(json.load(f).get("armed"))
+    except Exception:
+        return False
+
+
 def get_targets(conn, limit):
     pending = conn.execute(
         "SELECT COUNT(*) AS c FROM adversarial_replications WHERE status='pending'"
@@ -402,6 +492,11 @@ def get_targets(conn, limit):
     if slots == 0:
         print(f"{pending} attack(s) already pending — no free slots.")
         return []
+    n_take = min(slots, limit)
+    # Fetch a small multiple of the batch so shape re-ranking (armed) can pull
+    # over-trusted-shape claims INTO the batch, not just reorder within it.
+    # Disarmed, taking the first n_take of this pool is byte-identical to the
+    # old LIMIT n_take (same ORDER BY).
     rows = conn.execute("""
         SELECT kc.id, kc.hypothesis_text,
                COALESCE(kc.weighted_support_count, 0) AS wsc
@@ -430,7 +525,27 @@ def get_targets(conn, limit):
         ORDER BY (COALESCE(kc.weighted_support_count,0) >= ?) DESC,
                  kc.weighted_support_count DESC
         LIMIT ?""", (MAX_NARROWS_BEFORE_TERMINAL, ESTABLISHED_WSC,
-                     min(slots, limit))).fetchall()
+                     n_take * 4)).fetchall()
+    shapes = _overtrusted_shapes()
+    if shapes and rows:
+        try:
+            from mechanism_calibration import classify_mechanism
+            flagged = [r for r in rows
+                       if classify_mechanism(r["hypothesis_text"] or "") in shapes]
+            if _shape_priority_armed():
+                # stable partition: over-trusted shapes first, SQL order within
+                if flagged:
+                    print(f"  shape-priority ARMED: {len(flagged)} over-trusted-shape "
+                          f"claim(s) ({', '.join(sorted(shapes))}) attack first")
+                rows = flagged + [r for r in rows if r not in flagged]
+            elif flagged:
+                would = sum(1 for r in flagged if r not in rows[:n_take])
+                if would:
+                    print(f"  [shape-priority disarmed] would pull {would} "
+                          f"over-trusted-shape claim(s) into this batch")
+        except Exception:
+            pass
+    rows = rows[:n_take]
     # Honest count of what the cap UNIQUELY retires: a survived/refuted row already
     # excludes a claim above, so the cap only newly-removes REPLICATED claims that
     # never survived yet keep narrowing (the true orbiters — the #65826 shape). This
