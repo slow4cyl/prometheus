@@ -151,9 +151,12 @@ def complete_experiment(exp_id, result, tags=None, confidence_change=0, domain=N
                status = 'completed', completed_at = ?, domain = COALESCE(?, domain) WHERE id = ?""",
             (result, json.dumps(tags or []), confidence_change, time.time(), domain, exp_id))
 
-def get_unsynthesized_experiments():
-    return query_db(
-        "SELECT id, hypothesis, result, tags, domain FROM experiments WHERE status = 'completed' AND id NOT IN (SELECT DISTINCT source_experiment FROM subtopics WHERE source_experiment IS NOT NULL)")
+# get_unsynthesized_experiments() and add_subtopic() removed 2026-07-12: the
+# subtopics/gaps tables froze at their 2026-05-31 seed (synthesis merges into
+# self_state.json, not these tables) and their integer domain FKs were orphaned
+# by the old domains rebuild — so "not in subtopics" matched effectively every
+# completed experiment. The live analog of "unsynthesized" is an experiment
+# with no claim_evidence link; see get_metrics_summary().
 
 def get_experiments_by_domain(domain):
     return query_db(
@@ -166,14 +169,6 @@ def add_domain(name, confidence=0.5):
         conn.execute(
             "INSERT INTO domains (name, confidence, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(name) DO UPDATE SET confidence = ?, updated_at = ?",
             (name, confidence, now, now, confidence, now))
-
-def add_subtopic(domain_name, topic, source_experiment=None):
-    with get_db() as conn:
-        domain = conn.execute("SELECT id FROM domains WHERE name = ?", (domain_name,)).fetchone()
-        if domain:
-            conn.execute(
-                "INSERT INTO subtopics (domain_id, topic, source_experiment, created_at) VALUES (?, ?, ?, ?)",
-                (domain["id"], topic, source_experiment, time.time()))
 
 def add_curiosity(text, priority=5, source_experiment=None):
     with get_db() as conn:
@@ -212,18 +207,21 @@ def log_self_mod(mod_type, description, cycle_id=None):
             (cycle_id, mod_type, description, time.time()))
 
 def get_metrics_summary():
+    # 2026-07-12: subtopics/gaps_open/unsynthesized dropped — those tables froze
+    # at their 2026-05-31 seed, so the counts were fossils ("unsynthesized"
+    # matched ~every completed experiment). unclaimed_experiments is the live
+    # analog: completed results not yet linked into the claim graph.
     with get_db() as conn:
         return {
             "cycles": conn.execute("SELECT COUNT(*) as n FROM cycles").fetchone()["n"],
             "experiments_total": conn.execute("SELECT COUNT(*) as n FROM experiments").fetchone()["n"],
             "experiments_completed": conn.execute("SELECT COUNT(*) as n FROM experiments WHERE status = 'completed'").fetchone()["n"],
             "domains": conn.execute("SELECT COUNT(*) as n FROM domains").fetchone()["n"],
-            "subtopics": conn.execute("SELECT COUNT(*) as n FROM subtopics").fetchone()["n"],
-            "gaps_open": conn.execute("SELECT COUNT(*) as n FROM gaps WHERE status = 'open'").fetchone()["n"],
             "curiosities_active": conn.execute("SELECT COUNT(*) as n FROM curiosities WHERE status = 'active'").fetchone()["n"],
             "skills": conn.execute("SELECT COUNT(*) as n FROM skills").fetchone()["n"],
-            "unsynthesized": conn.execute(
-                "SELECT COUNT(*) as n FROM experiments WHERE status = 'completed' AND id NOT IN (SELECT DISTINCT source_experiment FROM subtopics WHERE source_experiment IS NOT NULL)"
+            "unclaimed_experiments": conn.execute(
+                "SELECT COUNT(*) as n FROM experiments e WHERE e.status = 'completed' "
+                "AND NOT EXISTS (SELECT 1 FROM claim_evidence ce WHERE ce.experiment_id = e.id)"
             ).fetchone()["n"],
         }
 

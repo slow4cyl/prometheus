@@ -472,15 +472,19 @@ def main():
     action_count = sum(1 for l in actions if l.strip().startswith("✓"))
     print(f"Summary: {action_count} actions, {len(skipped)//2} skipped")
 
-    # Print DB metrics
+    # Print DB metrics. 2026-07-12: the old "unsynthesized" count checked the
+    # frozen subtopics table and matched ~every completed experiment — a fossil
+    # number printed every 10 minutes. Unclaimed = completed results not yet
+    # linked into the claim graph (the live meaning of "not synthesized").
     try:
         conn = get_db()
-        unsynth = conn.execute(
-            "SELECT COUNT(*) as n FROM experiments WHERE status = 'completed' AND id NOT IN (SELECT DISTINCT source_experiment FROM subtopics WHERE source_experiment IS NOT NULL)"
+        unclaimed = conn.execute(
+            "SELECT COUNT(*) as n FROM experiments e WHERE e.status = 'completed' "
+            "AND NOT EXISTS (SELECT 1 FROM claim_evidence ce WHERE ce.experiment_id = e.id)"
         ).fetchone()["n"]
         total_exp = conn.execute("SELECT COUNT(*) as n FROM experiments").fetchone()["n"]
         conn.close()
-        print(f"\nDB: {total_exp} experiments, {unsynth} unsynthesized")
+        print(f"\nDB: {total_exp} experiments, {unclaimed} unclaimed (no claim_evidence link)")
     except Exception:
         pass
 

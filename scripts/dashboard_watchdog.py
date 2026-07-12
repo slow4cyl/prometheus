@@ -1,29 +1,30 @@
 #!/usr/bin/env python3
-"""Watchdog for BOTH Prometheus dashboards — matched pairs only.
+"""Watchdog for the Prometheus dashboard (v2, :8889) — matched pair only.
 
 v3 (2026-07-08): the old version was cross-wired — it health-checked :8888
-(the v1 dashboard, a DETACHED process: /usr/bin/python3 ~/prometheus_dashboard.py)
-but its restart action bounced prometheus-dashboard.service, which serves the
-v2 dashboard on :8889. So a v1 death could never be revived AND would bounce
-the healthy v2 unit every 10 minutes forever, while a hung v2 went undetected.
+(the v1 dashboard) but its restart action bounced prometheus-dashboard.service,
+which serves the v2 dashboard on :8889. So a v1 death could never be revived
+AND would bounce the healthy v2 unit every 10 minutes forever, while a hung v2
+went undetected. Fixed to matched pairs.
 
-Now:
-  :8889 (v2, prometheus-dashboard.service) — curl / with retries; on failure
-        restart THE UNIT THAT OWNS THE PORT.
-  :8888 (v1, detached ~/prometheus_dashboard.py) — curl with retries; on
-        failure relaunch the detached process (setsid), report either way.
-Runs silent when both are healthy (cron-friendly).
+v4 (2026-07-12): v1 RETIRED. The detached v1 process (~/prometheus_dashboard.py,
+:8888) had been WEDGED since Jul 08 — alive and holding the port but never
+answering — so every watchdog cycle's relaunch died on Address-already-in-use
+and nobody noticed for four days, which is the empirical proof nobody uses v1.
+Part-12 made v2 the visibility surface; v1's panels also still read the dead
+subtopics/gaps tables. The wedged process was killed and both file copies
+archived to scripts/_archived-experiments/dashboards/. This watchdog now guards
+only the pair that matters: :8889 <-> prometheus-dashboard.service.
+Runs silent when healthy (cron-friendly).
 """
-import os
 import subprocess
 import sys
 import time
 
-CURL_TIMEOUT = 30       # both dashboards query the ~1.9GB DB — generous
+CURL_TIMEOUT = 30       # the dashboard queries the ~1.9GB DB — generous
 RETRY_INTERVAL = 10
 MAX_RETRIES = 3
 V2_SERVICE = "prometheus-dashboard.service"   # owns :8889
-V1_SCRIPT = os.path.expanduser("~/prometheus_dashboard.py")   # detached, :8888
 
 
 def is_alive(port):
@@ -65,21 +66,6 @@ def main():
             print("v2 dashboard (:8889) restarted via", V2_SERVICE)
         else:
             print("WARNING: v2 dashboard (:8889) failed to come back after unit restart")
-            rc = 1
-    # ── v1 on :8888 — the detached legacy dashboard ──
-    if not alive_with_retries(8888):
-        if os.path.exists(V1_SCRIPT):
-            subprocess.Popen(
-                ["setsid", "/usr/bin/python3", V1_SCRIPT],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                start_new_session=True)
-            if wait_for(8888):
-                print("v1 dashboard (:8888) relaunched detached")
-            else:
-                print("WARNING: v1 dashboard (:8888) did not come back after relaunch")
-                rc = 1
-        else:
-            print(f"WARNING: v1 dashboard down and {V1_SCRIPT} missing")
             rc = 1
     return rc
 
