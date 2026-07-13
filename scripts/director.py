@@ -116,7 +116,7 @@ def main():
         try:
             r = subprocess.run(
                 ["python3", os.path.join(SCRIPTS_DIR, "queue_curator.py"), "--dry-run"],
-                capture_output=True, text=True, timeout=120
+                capture_output=True, text=True, timeout=180
             )
             # Show last 20 lines of output
             lines = r.stdout.strip().split('\n')
