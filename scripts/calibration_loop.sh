@@ -51,16 +51,17 @@ fi
 
 after=$(sqlite3 "$HIST_DB" "PRAGMA busy_timeout=15000; SELECT COUNT(*) FROM calibration_model_history WHERE promoted=1;" 2>/dev/null | tail -1 || echo "NA")
 
-# --- 3. Beta fit + backfill only if a new model was promoted ---
+# --- 3. Backfill only if a new model was promoted ---
 if [ "$before" != "NA" ] && [ "$after" != "NA" ] && [ "$after" -gt "$before" ]; then
-    # 3a. Fit Beta calibration parameters (holdout-based Platt scaling)
-    beta_out=$("$SYS_PY" "$SCRIPTS/train_calibration.py" 2>&1)
-    beta_rc=$?
-    echo "[$(ts)] BETA_FIT rc=$beta_rc :: $(echo "$beta_out" | tail -1)" >> "$LOG"
-    if [ "$beta_rc" -ne 0 ]; then
-        echo "calibration_loop: BETA FIT FAILED rc=$beta_rc :: $(echo "$beta_out" | tail -1)"
-        exit 1
-    fi
+    # NOTE: the old step 3a ran train_calibration.py here to "fit Beta params".
+    # That is a fossil — calibration_trainer.py already fits beta_a/b/c
+    # (_beta_a_b_c) and writes model_current.pkl + .json IN SYNC. train_calibration
+    # overwrote ONLY the .json with a second, unconstrained (non-monotone) beta fit,
+    # desyncing the runtime's .json from the .pkl the promotion gate scores. The gate
+    # then saw a healthy champion (.pkl) and rejected every challenger for "no gain"
+    # while the runtime served a collapsed map (raw 0.95 -> ~0.0001). Removed
+    # 2026-07-13; the trainer's own artifacts are authoritative. See train_calibration.py
+    # (now guarded to refuse to run).
 
     # 3b. Backfill recalibrated confidences (sklearn-free -> sys python)
     bf_out=$("$SYS_PY" "$SCRIPTS/backfill_calibration_mv.py" 2>&1)

@@ -173,7 +173,21 @@ def compute_ece(predictions, labels, n_bins=10):
 
 def main():
     dry_run = '--dry-run' in sys.argv
-    
+
+    # DEPRECATED / GUARDED 2026-07-13. This script overwrites ONLY model_current.json
+    # with its own unconstrained Beta fit, leaving model_current.pkl (which the
+    # promotion gate in calibration_trainer.py scores) untouched. That desync served a
+    # non-monotone, collapsed calibration map to the runtime (raw 0.95 -> ~0.0001) for a
+    # month while the gate believed the champion was healthy and rejected every fix.
+    # calibration_trainer.py now fits beta_a/b/c itself and writes both artifacts in
+    # sync, so this script is redundant and actively harmful. It refuses to run unless
+    # explicitly forced with --i-know-this-desyncs-the-model (never do this in the loop).
+    if '--i-know-this-desyncs-the-model' not in sys.argv:
+        print("train_calibration.py is DEPRECATED and refuses to run: it desyncs "
+              "model_current.json from model_current.pkl. calibration_trainer.py fits "
+              "beta params and writes both artifacts in sync. No action taken.")
+        return 0
+
     print("Loading model...")
     model = load_model()
     print(f"  kind: {model.get('kind')}")

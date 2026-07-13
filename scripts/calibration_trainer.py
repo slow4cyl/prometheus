@@ -36,7 +36,7 @@ import time
 import tempfile
 import traceback
 
-sys.path.insert(0, os.path.expanduser("~/.hermes/scripts"))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from calibration_features import (extract_features, FEATURE_NAMES,  # noqa: E402
                                   FEATURE_VERSION)
 from prometheus_paths import KANBAN_DB, PROMETHEUS_DB, under_home  # noqa: E402
@@ -62,6 +62,19 @@ SEED = 42
 
 def log(msg):
     print(f"[calib-trainer {time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}", flush=True)
+
+
+def beta_map_is_monotone(beta_a, beta_b, beta_c, n=257):
+    """True iff the Beta calibration map p(s)=sigmoid(a*ln s + b*ln(1-s) + c) is
+    non-decreasing across s in (0,1). A calibration map that inverts (high base
+    score -> low calibrated probability) is never a valid model; refuse to
+    promote one. Pure-numpy so it runs in CI. See the 2026-07-13 incident:
+    an unconstrained beta fit collapsed raw 0.95 -> ~0.0001."""
+    import numpy as _np
+    s = _np.linspace(1e-4, 1 - 1e-4, n)
+    logit = beta_a * _np.log(s) + beta_b * _np.log(1 - s) + beta_c
+    p = 1.0 / (1.0 + _np.exp(-logit))
+    return bool(_np.all(_np.diff(p) >= -1e-9))
 
 
 def load_data():
@@ -221,8 +234,14 @@ def main():
                 p = 1 / (1 + np.exp(-logit_beta))
                 return -np.mean(y_tr * np.log(p + eps) + (1 - y_tr) * np.log(1 - p + eps))
 
-            # Warm-start: a=1, b=-1, c=0  — identity-ish (sigmoid(z) -> logit)
-            result = minimize(loss, [1.0, -1.0, 0.0], method='L-BFGS-B')
+            # Warm-start: a=1, b=-1, c=0  — identity-ish (sigmoid(z) -> logit).
+            # Bounds a>=0, b<=0 keep the map MONOTONE increasing in s:
+            # d/ds[a*ln(s)+b*ln(1-s)] = a/s - b/(1-s) >= 0 when a>=0, b<=0. An
+            # unconstrained fit can (and once did) wander to a non-monotone
+            # solution that collapses high confidence to ~0 — a calibration map
+            # must never invert. c is free.
+            result = minimize(loss, [1.0, -1.0, 0.0], method='L-BFGS-B',
+                              bounds=[(0.0, None), (None, 0.0), (None, None)])
             return float(result.x[0]), float(result.x[1]), float(result.x[2])
         except ImportError:
             # scipy missing: fallback to Platt (2-param)
@@ -348,6 +367,15 @@ def main():
                 reasons.append(
                     f"no meaningful gain (dAUC={auc_ch-auc_champ:+.4f} < "
                     f"{MIN_CHAMP_GAIN}) and champion fresh ({champ_age_days:.1f}d)")
+
+    # Monotonicity gate: never deploy a calibration map that inverts, regardless
+    # of AUC/Brier. A non-monotone map can score acceptably in aggregate while
+    # collapsing high-confidence correct findings to ~0 (2026-07-13 incident).
+    if chal.get("kind") == "lr_beta_1d" and not beta_map_is_monotone(
+            chal["beta_a"], chal["beta_b"], chal["beta_c"]):
+        reasons.append(
+            f"challenger beta map non-monotone (a={chal['beta_a']:.3f} "
+            f"b={chal['beta_b']:.3f} c={chal['beta_c']:.3f})")
 
     promote = len(reasons) == 0
     ts = int(time.time())
