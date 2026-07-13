@@ -30,7 +30,11 @@ import sys
 import time
 from db_retry import get_db
 
-sys.path.insert(0, os.path.expanduser("~/.hermes/scripts"))
+# Own directory, not a hardcoded ~/.hermes/scripts: in production this file
+# lives in ~/.hermes/scripts so the two are identical, but hardcoding the live
+# dir shoves it to the front of sys.path under pytest and shadows the repo copy
+# of every sibling module (a test would then silently exercise deployed code).
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from write_worker_result import verify_artifacts  # noqa: E402
 
 DB = _PP_PROMETHEUS_DB

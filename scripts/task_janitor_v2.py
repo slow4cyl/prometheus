@@ -64,6 +64,46 @@ STALE_MINUTES = 45
 LONG_RUNNING_MINUTES = 60
 MAX_RETRIES = 2
 
+# Experiment-id token in a task title, e.g. "exp_1782685474000009412: [TRANSFER] ...".
+# Mirrors db_reconciliation_monitor.EXP_ID_RE so both agree on what a result is.
+_EXP_ID_RE = re.compile(r"(exp_[A-Za-z0-9_]+)")
+
+
+def experiment_result_in_prometheus(title):
+    """For an experiment task, has its worker_result actually reached prometheus?
+
+    Returns True if the exp_id parsed from the title has a row in prometheus.db
+    (worker_results OR experiments), False if it is an experiment task whose
+    result never landed, and None if the title carries no exp_id (not an
+    experiment task — the caller keeps its workspace-file heuristic then).
+
+    Why this exists: analyze_workspace().has_results is true for ANY stray
+    .json/summary file or /tmp/exp_*_output.log in the workspace — a half-written
+    script or intermediate dump, NOT a completed result. Auto-completing an
+    experiment task on that signal mints a "done, has results" run with no
+    worker_result behind it, which db_reconciliation_monitor then flags as a lost
+    experiment forever (first seen: t_493718b8, a [TRANSFER] task whose worker
+    context-overflowed before it ever called write_worker_result.py). A real
+    result lives in prometheus.db, so that is what we check."""
+    m = _EXP_ID_RE.search(title or "")
+    if not m:
+        return None
+    exp_id = m.group(1).rstrip("_")
+    try:
+        conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True, timeout=30)
+        try:
+            hit = conn.execute(
+                "SELECT 1 FROM worker_results WHERE experiment_id=? "
+                "UNION ALL SELECT 1 FROM experiments WHERE id=? LIMIT 1",
+                (exp_id, exp_id)).fetchone()
+        finally:
+            conn.close()
+        return hit is not None
+    except sqlite3.Error:
+        # Can't prove absence — fail open to the old heuristic rather than
+        # reclaim a task on a transient DB error.
+        return None
+
 
 
 def run_kanban(args):
@@ -225,7 +265,25 @@ def analyze_task(task):
             analysis["decision"] = "AUTO-COMPLETE"
             analysis["reason"] = "Report exists and task is recent."
         elif task_age_min > LONG_RUNNING_MINUTES:
-            if ws.get("has_results"):
+            prom_result = experiment_result_in_prometheus(title)
+            if prom_result is True:
+                analysis["decision"] = "AUTO-COMPLETE"
+                analysis["reason"] = f"Long-running ({task_age_min:.0f}min), result in prometheus."
+            elif prom_result is False:
+                # Experiment task whose result never reached prometheus. A stray
+                # workspace file is NOT a result — completing here mints a
+                # reconciliation ghost. Give a live worker room; otherwise retry,
+                # then abandon (never auto-complete a resultless experiment).
+                if is_worker_alive(task_id):
+                    analysis["decision"] = "SKIP"
+                    analysis["reason"] = f"Long-running ({task_age_min:.0f}min), no prometheus result yet but worker alive."
+                elif reclaims >= MAX_RETRIES:
+                    analysis["decision"] = "ABANDON"
+                    analysis["reason"] = f"Long-running ({task_age_min:.0f}min), no prometheus result after {reclaims} reclaims."
+                else:
+                    analysis["decision"] = "RECLAIM"
+                    analysis["reason"] = f"Long-running ({task_age_min:.0f}min), no prometheus result yet."
+            elif ws.get("has_results"):
                 analysis["decision"] = "AUTO-COMPLETE"
                 analysis["reason"] = f"Long-running ({task_age_min:.0f}min) but has results."
             elif reclaims >= MAX_RETRIES:
