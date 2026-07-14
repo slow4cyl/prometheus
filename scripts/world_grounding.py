@@ -93,13 +93,23 @@ _EXTERNAL_PAT = re.compile(
     r"|datasets\.load|kagglehub|read_csv\s*\(\s*['\"]https?://"
     r"|read_json\s*\(\s*['\"]https?://|huggingface_hub|hf_hub_download"
     r"|Vizier|SDSS|MAST|GWOSC|fredapi|pandas_datareader|zenodo|figshare"
-    r"|api\.crossref|api\.semanticscholar|pooch\.", re.I)
+    r"|api\.crossref|api\.semanticscholar|pooch\."
+    # canonical real-dataset loaders the first cut missed (each verified
+    # against a live false-negative; none appear in synthetic generators):
+    # torchvision/keras archives, download= kwargs, the openml package/API,
+    # subprocess-list curl/wget, sklearn's bundled real UCI datasets
+    r"|torchvision\.datasets|keras\.datasets|download\s*=\s*True"
+    r"|import\s+openml|openml\.org"
+    r"|['\"](?:curl|wget)['\"]"
+    r"|load_(?:iris|wine|breast_cancer|digits|diabetes|linnerud)\s*\(", re.I)
 _SYNTH_PAT = re.compile(
     r"np\.random\.|numpy\.random|torch\.rand|torch\.randn|random\.gauss"
     r"|make_classification|make_regression|make_blobs|make_moons"
     r"|rng\s*=\s*np\.random|default_rng", re.I)
 # reading a local file the script did not itself write is weak-external
-_LOCAL_READ_PAT = re.compile(r"read_csv\s*\(|np\.loadtxt|open\s*\([^)]*['\"]r['\"]", re.I)
+_LOCAL_READ_PAT = re.compile(
+    r"read_csv\s*\(|np\.loadtxt|gzip\.open|np\.load\s*\("
+    r"|open\s*\([^)]*['\"]r[tb]?['\"]", re.I)
 
 
 def world_basis(task_id):
@@ -338,6 +348,8 @@ def reconcile(conn):
     conn.commit()
     k.close()
 
+    reverify_unverified(conn)
+
     rows = conn.execute("SELECT outcome, verified, COUNT(*) c FROM world_groundings "
                         "WHERE status='resolved' GROUP BY outcome, verified").fetchall()
     holds_v = sum(r["c"] for r in rows if r["outcome"] == "HOLDS" and r["verified"])
@@ -359,6 +371,39 @@ def reconcile(conn):
         print(f"  reconcile: {resolved} resolved, {dead} dead")
     print(f"  world agreement: {rate if rate is not None else 'n/a'} "
           f"(HOLDS {holds_v} / FAILS {fails_v} / NO_DATASET {nodata} / unverified {unver})")
+
+
+def reverify_unverified(conn):
+    """Re-audit resolved HOLDS/FAILS rows that failed verification at
+    resolution time. Artifacts are preserved at result-write time, so a
+    reconcile that raced the preservation (or predates a basis-detector fix)
+    saw no_code/synthetic and froze verified=0 forever — a never-revisited
+    resting tier. Deterministic re-check against today's artifacts; flips
+    only 0 -> 1, never revokes. Bounded by the unverified count (visible in
+    world_calibration.json), so re-running every reconcile is cheap."""
+    flipped = 0
+    rows = conn.execute(
+        "SELECT * FROM world_groundings WHERE status='resolved' "
+        "AND outcome IN ('HOLDS','FAILS') AND COALESCE(verified,0)=0").fetchall()
+    for wg in rows:
+        wr = conn.execute(
+            "SELECT COALESCE(key_finding, finding) AS result FROM worker_results "
+            "WHERE experiment_id LIKE ? ORDER BY id DESC LIMIT 1",
+            (wg["experiment_id"] + "%",)).fetchone()
+        text = (wr["result"] if wr else "") or ""
+        dm = DATASET_RE.search(text)
+        dataset = wg["dataset"] or (dm.group(1).strip()[:300] if dm else None)
+        basis, _ev = world_basis(wg["kanban_task_id"])
+        if dataset and basis in ("external", "mixed", "local_file"):
+            conn.execute(
+                "UPDATE world_groundings SET verified=1, dataset=?, basis=? WHERE id=?",
+                (dataset, basis, wg["id"]))
+            flipped += 1
+            print(f"  re-verified #{wg['claim_id']}: {wg['outcome']} basis={basis}")
+    conn.commit()
+    if flipped:
+        print(f"  reverify: {flipped} previously-unverified outcomes now verified")
+    return flipped
 
 
 def scan_shelf(conn):
