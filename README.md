@@ -108,7 +108,7 @@ toy-vs-world lane (`world_grounding.py`) is the only one that tests
 settings and re-runs them against real external datasets, with the loader
 code preserved and mechanically classified so a worker can't claim
 "tested against real data" while running another simulation. In the
-reference deployment, only **~71% of verified re-tests hold** (15/21) —
+reference deployment, only **~69% of verified re-tests hold** (20/29) —
 roughly three in ten simulation-validated findings are refused by reality.
 Those refusals aren't buried; they're first-class results the lane records
 and the dashboard displays. Most autonomous-research systems never ask this
