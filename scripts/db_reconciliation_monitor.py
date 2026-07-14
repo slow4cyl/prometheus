@@ -224,11 +224,25 @@ def main():
                       f"with summaries never reached prometheus (e.g. {missing[:3]})")
 
     # --- 3. worker_results stranded in kanban.db ------------------------------
-    strays = [r[0] for r in k.execute(
-        "SELECT experiment_id FROM worker_results WHERE created_at > ? AND created_at < ?",
+    stray_rows = [(r[0], r[1]) for r in k.execute(
+        "SELECT experiment_id, kanban_task_id FROM worker_results "
+        "WHERE created_at > ? AND created_at < ?",
         (BASELINE_EPOCH, now - GRACE_SECONDS))
         if r[0] and r[0] not in pwr_ids and r[0] not in exp_ids]
+    # Benchmark-lane cards (bench3 t_b3_* ids / [BENCH* titles) are Q&A and
+    # verification tasks, not prometheus experiments — a worker that invokes
+    # the write CLI from one correctly lands kanban-side only, and its result
+    # SHOULD stay out of prometheus. Classify those benign; alert the rest.
+    strays, bench_kanban_only = [], []
+    for eid, tid in stray_rows:
+        title_row = k.execute("SELECT title FROM tasks WHERE id=?", (tid,)).fetchone() if tid else None
+        title = (title_row[0] or "") if title_row else ""
+        if tid and (tid.startswith("t_b3_") or title.startswith("[BENCH")):
+            bench_kanban_only.append(eid)
+        else:
+            strays.append(eid)
     info["kanban_strays"] = strays
+    info["benchmark_kanban_only"] = bench_kanban_only
     if strays:
         alerts.append(f"kanban_strays: {len(strays)} worker_results written to kanban.db "
                       f"exist nowhere in prometheus (e.g. {strays[:3]})")
