@@ -453,6 +453,11 @@ def sync():
         if _pre_trunc_boundary:
             _pre_trunc_bd_ids = {id(i) for i in _pre_trunc_boundary}
             items = [i for i in items if id(i) not in _pre_trunc_bd_ids]
+        _pre_trunc_split = [i for i in items
+                            if i.get("text", "").lstrip().upper().startswith("[SPLIT]")][:8]
+        if _pre_trunc_split:
+            _pre_trunc_sp_ids = {id(i) for i in _pre_trunc_split}
+            items = [i for i in items if id(i) not in _pre_trunc_sp_ids]
         if len(items) > MAX_QUEUE_SIZE:
             items = items[:MAX_QUEUE_SIZE]
         if _pre_trunc_synthesis:
@@ -464,6 +469,9 @@ def sync():
         if _pre_trunc_boundary:
             items = _pre_trunc_boundary + items
             print(f"  Boundary pre-trunc: {len(_pre_trunc_boundary)} items reserved before MAX_QUEUE_SIZE cut")
+        if _pre_trunc_split:
+            items = _pre_trunc_split + items
+            print(f"  Split pre-trunc: {len(_pre_trunc_split)} items reserved before MAX_QUEUE_SIZE cut")
         # Enforce diversity: split transfers and non-transfers, interleave
         # to guarantee at most 70% transfers in the final queue.
         TRANSFER_CAP_PCT = 0.70  # Allow 70% transfers to ensure hidden bridges get through
@@ -499,6 +507,17 @@ def sync():
             _boundary_ids = {id(i) for i in _boundary_reserved}
             non_transfer = [i for i in non_transfer if id(i) not in _boundary_ids]
             print(f"  Boundary reserved: {len(_boundary_reserved)} items (guaranteed slice, cap 16; drain mode 2026-07-04)")
+        # Claim-splitter slice ([SPLIT], provenance claim_split:<parent>):
+        # sub-propositions decomposed from spurious-support claims. Scores
+        # ~22-35 sit mid-pack against the mass lanes — 0 of 166 minted in
+        # their first 2 days without a reservation (the boundary lane's exact
+        # starvation mode). The refiller's [SPLIT] sub-pool does the minting.
+        _split_reserved = [i for i in non_transfer
+                           if i.get("text", "").lstrip().upper().startswith("[SPLIT]")][:8]
+        if _split_reserved:
+            _split_ids = {id(i) for i in _split_reserved}
+            non_transfer = [i for i in non_transfer if id(i) not in _split_ids]
+            print(f"  Split reserved: {len(_split_reserved)} items (guaranteed slice, cap 8)")
         non_transfer = non_transfer[:MAX_QUEUE_SIZE - max_transfers]
         # NOTE: do NOT pre-trim `transfer` to max_transfers here. opportunity_injection
         # items (591 active) vastly outnumber moderate_success (30) and refutation_boost
@@ -535,7 +554,7 @@ def sync():
         # Final order: synthesis deep (guaranteed, dispatched first) → candidate
         # retests (guaranteed slice) → hidden bridges → protected partial-success
         # bridges → non-transfer → regular transfers
-        items = _synthesis_deep_reserved + _retest_reserved + _boundary_reserved + hidden_transfers + protected_transfers + non_transfer + regular_transfers
+        items = _synthesis_deep_reserved + _retest_reserved + _boundary_reserved + _split_reserved + hidden_transfers + protected_transfers + non_transfer + regular_transfers
         transfer_actual = len(hidden_transfers) + len(protected_transfers) + len(regular_transfers)
         pct = 100 * transfer_actual / max(len(items), 1)
         
@@ -564,7 +583,7 @@ def sync():
                 surplus -= trim_from_protected
             if surplus > 0:
                 hidden_transfers = hidden_transfers[:max(0, len(hidden_transfers) - surplus)]
-            items = _synthesis_deep_reserved + _retest_reserved + _boundary_reserved + hidden_transfers + protected_transfers + non_transfer + regular_transfers
+            items = _synthesis_deep_reserved + _retest_reserved + _boundary_reserved + _split_reserved + hidden_transfers + protected_transfers + non_transfer + regular_transfers
             transfer_actual = len(hidden_transfers) + len(protected_transfers) + len(regular_transfers)
             pct = 100 * transfer_actual / max(len(items), 1)
             print(f"  Ratio enforcement: trimmed to {transfer_actual} transfers ({pct:.0f}%) to respect {TRANSFER_CAP_PCT:.0%} cap")

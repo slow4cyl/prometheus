@@ -36,7 +36,8 @@ _FED_LINE = re.compile(r"^- \[[\d.]+\]\s*(.+)$", re.M)
 # the claim under test but must not carry OTHER findings. Checked by both
 # task builders before enrichment; the stamp then records prior_fed=0,
 # which is what lets these results count as measured-blind supports.
-SUPPRESS_PREFIXES = ("[CANDIDATE-RETEST]", "[BOUNDARY]", "[CLEAN-ROOM]", "[WORLD]")
+SUPPRESS_PREFIXES = ("[CANDIDATE-RETEST]", "[BOUNDARY]", "[CLEAN-ROOM]", "[WORLD]",
+                     "[SPLIT]")
 
 
 def suppress_prior_context(task_text):

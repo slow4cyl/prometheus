@@ -206,7 +206,14 @@ def inject_curiosities(conn, parent_id, subs, findings, dry_run):
         cur = conn.execute(
             "INSERT INTO curiosities (text, priority, status, source_experiment, "
             "created_at, provenance) VALUES (?, 7, 'active', ?, ?, ?)",
-            (text, real_exp, time.time(), f"claim_split:{parent_id}"))
+            # [SPLIT] prefix = the lane key: sync_curiosity_views reserves a
+            # queue slice for it, task_refiller's _LANE_TARGETS sub-pool mints
+            # it, and prior_feed_stamp suppresses the RAG feed (sub-propositions
+            # exist because supports DISAGREED — test them blind). Without the
+            # prefix the subs sat mid-pack organic: 0/166 minted in 2 days.
+            # normalize_hypothesis strips leading [tags], so claim identity is
+            # the bare sub-proposition text, unaffected by the lane tag.
+            (f"[SPLIT] {text}", real_exp, time.time(), f"claim_split:{parent_id}"))
         ids.append(cur.lastrowid)
     if not dry_run:
         conn.commit()

@@ -9,6 +9,10 @@ JSON for the Director to read.
 
 This script has ZERO policy. It maintains depth. That's it.
 """
+import os as _os
+_os.environ.setdefault('OMP_THREAD_LIMIT', '1')
+_os.environ.setdefault('OPENBLAS_NUM_THREADS', '1')
+_os.environ.setdefault('MKL_NUM_THREADS', '1')
 
 import json
 from prometheus_paths import HERMES_HOME as _PP_HERMES_HOME
@@ -318,19 +322,22 @@ def direct_db_create(lane, count):
                 """).fetchall()
                 _b3_db.close()
                 # Filter out curiosities that already have kanban tasks
+                # BATCH FIX: one query for all bodies, then Python membership check.
+                # Was: N individual LIKE queries (O(N*117K) scans). Now: 1 query + O(N) set check.
                 if _b3_rows:
                     try:
                         _kanban = retry_get_db(KANBAN_DB)
+                        _all_bodies = " ".join(
+                            r[0] or "" for r in _kanban.execute(
+                                "SELECT body FROM tasks WHERE status IN ('ready','running')"
+                            ).fetchall()
+                        )
+                        _kanban.close()
                         _dispatched_ids = set()
                         for _b3 in _b3_rows:
                             _cid_str = str(_b3["id"])
-                            _exists = _kanban.execute(
-                                "SELECT 1 FROM tasks WHERE status IN ('ready','running') AND body LIKE ? LIMIT 1",
-                                (f"%CURIOSITY_ID: {_cid_str}%",)
-                            ).fetchone()
-                            if _exists:
+                            if f"CURIOSITY_ID: {_cid_str}" in _all_bodies:
                                 _dispatched_ids.add(_b3["id"])
-                        _kanban.close()
                         _b3_rows = [r for r in _b3_rows if r["id"] not in _dispatched_ids]
                     except Exception:
                         pass  # Fail open — if kanban check fails, allow dispatch
@@ -448,7 +455,8 @@ def direct_db_create(lane, count):
             #     (the ESTABLISHED bottleneck) — surge to 12 until the pool
             #     drains, then the deficit self-throttles; revert to ~4 at
             #     steady state.
-            _LANE_TARGETS = (("[CANDIDATE-RETEST]", 18), ("[BOUNDARY]", 12))
+            _LANE_TARGETS = (("[CANDIDATE-RETEST]", 18), ("[BOUNDARY]", 12),
+                             ("[SPLIT]", 3))
             _front = []
             for _pfx, _target in _LANE_TARGETS:
                 _lane_items = [i for i in items if isinstance(i, dict)
@@ -477,7 +485,6 @@ def direct_db_create(lane, count):
                 _budget_exempt_ids = set()
         else:
             _budget_exempt_ids = set()
-
         for item in items:  # Scan ALL items, not just first count
             if created >= count:
                 if not _budget_exempt_ids:
@@ -662,7 +669,26 @@ def direct_db_create(lane, count):
                     sys.path.insert(0, SCRIPTS_DIR)
                     from experiment_rag import query_rag
                     # Over-fetch (top_k=6) so the verdict filter still leaves ~3.
-                    _rag_results = query_rag(text, top_k=6, worker_id="refiller_enrichment")
+                    # Multiprocessing timeout: skip RAG if it hangs (fixes refiller stale issue)
+                    import multiprocessing as _mp
+                    def _rag_worker(q, text_arg):
+                        try:
+                            from experiment_rag import query_rag as _qr
+                            r = _qr(text_arg, top_k=6, worker_id="refiller_enrichment")
+                            q.put(r)
+                        except Exception:
+                            q.put(None)
+                    _mpq = _mp.Queue()
+                    _p = _mp.Process(target=_rag_worker, args=(_mpq, text))
+                    _p.start()
+                    _p.join(timeout=15)
+                    if _p.is_alive():
+                        _p.terminate()
+                        _p.join(timeout=2)
+                        _rag_results = None
+                    else:
+                        _rag_results = _mpq.get() if not _mpq.empty() else None
+                    # print(f"
                     if _rag_results and not isinstance(_rag_results, dict):
                         _parts = []
                         for _r in _rag_results:
