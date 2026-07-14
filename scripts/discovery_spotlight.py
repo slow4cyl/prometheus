@@ -440,6 +440,26 @@ def main():
         elif live:
             print(f"  #{cid}: already has a live attack — ledgered, not re-enqueued")
 
+    # Evict resting rows: a ledger row whose claim has LEFT the candidate set
+    # (demoted below REPLICATED, re-audited off LIT_NOT_FOUND, re-classed
+    # meta/empirical) is never upserted again, so it sits frozen at its last
+    # score/route forever — a stationary fossil polluting ledger queries.
+    # Mark off_band (score + hardening_task_id kept); the normal upsert
+    # revives the row in place if the claim re-enters the band. 'broken'
+    # stays terminal — a hardening refutation outranks band membership.
+    live_ids = {x["cid"] for x in scored}
+    stale = [r[0] for r in conn.execute(
+        "SELECT claim_id FROM discovery_candidates "
+        "WHERE COALESCE(status,'') NOT IN ('off_band','broken')").fetchall()
+        if r[0] not in live_ids]
+    for cid in stale:
+        conn.execute(
+            "UPDATE discovery_candidates SET status='off_band', updated_at=? "
+            "WHERE claim_id=?", (time.time(), cid))
+    conn.commit()
+    if stale:
+        print(f"  evicted {len(stale)} resting ledger rows (claims left the candidate set)")
+
     snap = write_report_json(conn, scored)
     conn.close()
     print(f"\nledgered {len(scored)} candidates ({snap['n_shelf']} on shelf, {binned} routed off), "

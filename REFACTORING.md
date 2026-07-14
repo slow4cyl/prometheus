@@ -50,7 +50,7 @@ fixed, which is why the rest of its list is taken seriously.)
   (re-stat backoff → healing WAL drain → double-drain stability proof) is now
   implemented and harness-validated (258,904 commits, 0 false alarms;
   positive control raises). Shipped in prometheus-fork `abd8a024b`;
-  upstream-PR candidate.
+  submitted upstream as NousResearch/hermes-agent#62122 (open).
 
 - **Domain normalization single-source** — `apply_worker_results` delegates
   to `write_worker_result.normalize_domain`; regression-pinned by

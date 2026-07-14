@@ -69,10 +69,23 @@ sidecars are unaffected by base updates.
 | [#61221](https://github.com/NousResearch/hermes-agent/pull/61221) | fix/process-registry-venv-env | 0011 |
 | [#61222](https://github.com/NousResearch/hermes-agent/pull/61222) | fix/kanban-guidance-tool-availability | 0012 |
 
-NOT submitted: 0006 hunk 4 (torn-extend WAL tolerance) — must be reworked into
-the bounded-tolerance form before upstreaming (the fork's silent-return would be
-rejected as deleting a corruption tripwire); it remains in our base meanwhile.
 Fork lives at github.com/slow4cyl/hermes-agent; gh CLI is now installed and
 authed on this box, so future submissions can be driven directly.
 As each PR merges: delete its patch file here and drop the matching base
 commit(s) at the next rebase.
+
+## Status refresh — 2026-07-14
+
+Everything is submitted; nothing pending. Later additions:
+
+| PR | Covers |
+|---|---|
+| [#62122](https://github.com/NousResearch/hermes-agent/pull/62122) | torn-extend WAL tripwire, the reworked bounded form (fork `abd8a024b`: re-stat backoff → healing drain → double-drain stability proof; closes the old "0006 hunk 4 not submitted" caveat) |
+| [#62121](https://github.com/NousResearch/hermes-agent/pull/62121) | cron: job-id fallback when a job's name is null |
+| [#61674](https://github.com/NousResearch/hermes-agent/pull/61674) | cron: lazy jobs.json path resolution (test write-leak) |
+
+Closed WITHOUT merge (upstream reworked or declined; patches stay
+fork-carried, do NOT delete): #61235 model-override arg order (upstream
+independently rebuilt spawn at the 2026-07-14 base update — resolved as a
+coexisting merge), #61233 reaper bounded retry, #61229 goal max-turns env.
+All others open awaiting review as of this refresh.

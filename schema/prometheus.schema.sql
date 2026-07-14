@@ -159,6 +159,10 @@ CREATE TABLE "worker_results" (
     worker_id TEXT,
     created_at INTEGER DEFAULT (CAST(strftime('%s', 'now') AS INTEGER)),
     applied INTEGER DEFAULT 0  -- 1=synced to experiments table + self_state.json
+-- finding_hash is a RETIRED legacy column: workers from the pre-defork
+-- 50-profile fleet wrote their own ad-hoc hashes into it (mixed sha256/md5/
+-- truncated formats, 1,777 rows, last write 2026-07-12); no script reads or
+-- writes it. Kept for column-order stability on the live DB; do not revive.
 , predicted_direction TEXT, observed_direction TEXT, design_vector TEXT, finding_hash TEXT, state_vector TEXT, experiment_type TEXT, mechanism_type TEXT DEFAULT NULL, bridge_attempts INTEGER DEFAULT 0, calibrated_confidence REAL, model TEXT, finding TEXT, files TEXT, queue TEXT, supported INTEGER, artifact_status TEXT DEFAULT 'UNVERIFIED', benchmark_id TEXT DEFAULT NULL, experiment_completed_at REAL, verdict_basis TEXT);
 CREATE TABLE transfer_tracking (
     id INTEGER PRIMARY KEY,
