@@ -34,6 +34,7 @@ import os
 import re
 import sys
 import time
+import socket
 import urllib.error
 import urllib.request
 
@@ -45,8 +46,17 @@ MODEL = "deepseek/deepseek-v4-flash"
 MAX_SUPPORTS = 12          # findings sent to the adjudicator per claim
 FINDING_CHARS = 700        # per-finding truncation
 CONTRADICTION_CAP = 3      # max contradiction_count bump per adjudication
-WALL_BUDGET_S = 150        # stop starting new claims after this; worst-case last
-                           # call adds ~125s (60+5+60), keeping total < the 300s cron kill
+LLM_TIMEOUT_S = 90         # per-call socket timeout. Measured real adjudications on this
+                           # model span 17-167s (avg ~74s): 90s catches the majority while
+                           # a hard bound keeps the cron under its kill. Slow calls that
+                           # exceed it fail fast (no retry) and are re-tried next cycle.
+CRON_KILL_S = 300          # the cron ticker SIGKILLs the script at this wall-clock
+SAFETY_MARGIN_S = 35       # leave this much slack before the kill
+WORST_CALL_S = LLM_TIMEOUT_S + 15       # worst-case single adjudication (timeout + one fast-fail retry + slop)
+# Don't START a new claim unless a worst-case call can still finish before the kill.
+# Old bug: a fixed 150s "stop" left the last call running to ~275s, and any extra
+# latency tipped the whole cron over 300s and it was SIGKILLed mid-write.
+START_DEADLINE_S = CRON_KILL_S - SAFETY_MARGIN_S - WORST_CALL_S   # = 195s
 MAX_FAILED_TRIES = 3       # give up on a fingerprint after this many failed adjudications
 
 
@@ -84,20 +94,30 @@ def call_llm(prompt, max_tokens=1200, temperature=0.1):
                  "Content-Type": "application/json",
                  "HTTP-Referer": "https://hermes-agent.local"},
         method="POST")
-    # Tight budget: the cron ticker kills scripts at 300s. Worst case per
-    # call must stay ~2 minutes (60s + 5s + 60s), and the main loop enforces
-    # a wall-clock budget on top (WALL_BUDGET_S).
+    # Worst case per call is WORST_CALL_S; the main loop's START_DEADLINE_S
+    # guarantees a call started at the deadline still finishes before CRON_KILL_S.
+    # A TIMEOUT is never retried: the model is genuinely slow, a retry just burns
+    # another LLM_TIMEOUT_S and risks the cron kill — defer that claim to the next
+    # cycle instead. Only fast transient errors (connection reset) get one retry.
     for attempt in range(2):
         try:
-            with urllib.request.urlopen(req, timeout=60) as resp:
+            with urllib.request.urlopen(req, timeout=LLM_TIMEOUT_S) as resp:
                 result = json.loads(resp.read())
                 return result["choices"][0]["message"]["content"]
+        except (TimeoutError, socket.timeout) as e:
+            print(f"  LLM call timed out ({LLM_TIMEOUT_S}s) — deferring: {e}", file=sys.stderr)
+            return None
         except (urllib.error.URLError, json.JSONDecodeError,
-                ConnectionResetError, TimeoutError, KeyError) as e:
+                ConnectionResetError, KeyError) as e:
+            # URLError can WRAP a socket timeout — treat that as slow, don't retry.
+            if isinstance(getattr(e, "reason", None), (TimeoutError, socket.timeout)) \
+                    or "timed out" in str(e).lower():
+                print(f"  LLM call timed out (wrapped) — deferring: {e}", file=sys.stderr)
+                return None
             if attempt == 1:
                 print(f"  LLM call failed after 2 attempts: {e}", file=sys.stderr)
                 return None
-            time.sleep(5)
+            time.sleep(3)
     return None
 
 
@@ -286,8 +306,9 @@ def main():
     disputed = consistent = failed = 0
     t0 = time.time()
     for c in cands:
-        if time.time() - t0 > WALL_BUDGET_S:
-            print(f"  wall budget ({WALL_BUDGET_S}s) reached — "
+        if time.time() - t0 > START_DEADLINE_S:
+            print(f"  start deadline ({START_DEADLINE_S}s) reached — a worst-case "
+                  f"call ({WORST_CALL_S}s) would risk the {CRON_KILL_S}s cron kill; "
                   f"deferring remaining claims to the next cycle")
             break
         claim = c["claim"]
