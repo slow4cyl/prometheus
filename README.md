@@ -8,7 +8,7 @@
 
 Prometheus turns a single Linux box with one GPU into a self-directing research fleet: it generates its own questions, dispatches LLM workers to run real experiments with preserved code, extracts claims with scoped confidence, and then spends a large fraction of its compute **attacking its own conclusions** — adversarial replication, cross-domain disconfirmation, novelty verification against the actual literature indexes, and calibration audits that measure how often the system's own confidence is wrong.
 
-It is not a chatbot, not a demo loop, and not turnkey. It is a working reference deployment: ~90 scheduled jobs, ~100 orchestration scripts, two SQLite WAL databases, three fail-open runtime plugins, and a local vLLM worker fleet on a single RTX 5090 — running continuously — over 130,000 experiments across 107,000+ dispatched tasks as of July 2026. Built solo, from scratch, in about a month, on one consumer gaming PC — as a first project.
+It is not a chatbot, not a demo loop, and not turnkey. It is a working reference deployment: ~90 scheduled jobs, ~100 orchestration scripts, two SQLite WAL databases, three fail-open runtime plugins, and a local vLLM worker fleet on a single RTX 5090 — running continuously — over 140,000 experiments across 110,000+ dispatched tasks as of July 2026. Built solo, from scratch, in about a month, on one consumer gaming PC — as a first project.
 
 ---
 
@@ -22,10 +22,10 @@ its dashboard):
 
 | It asked itself | Measured | Response |
 |---|---|---|
-| Can I predict which of my claims transfer to new domains? | **53%** — barely above chance | transfer confidence hair-cut across the board |
-| How much of my discovery shelf ever touched real-world data? | **2%** — 60/62 claims ran only self-generated simulation code | built the toy-vs-world lane to re-test against external datasets |
-| Do my simulation-validated claims survive real data? | **~71%** of verified re-tests hold (15/21) | the 6 refusals are catalogued as first-class results, not buried |
-| Which claim shapes do I over-trust? | MONOTONIC mechanisms, **67.6%** over-trusted | reweighted at the calibration layer |
+| Can I predict which of my claims transfer to new domains? | **~58%** — barely above chance (53% on the first N=32 meta-probes) | transfer confidence hair-cut across the board |
+| How much of my discovery shelf ever touched real-world data? | **~2%** — the shelf ran almost entirely on self-generated simulation code | built the toy-vs-world lane to re-test against external datasets |
+| Do my simulation-validated claims survive real data? | **~69%** of verified re-tests hold (20/29) | the refusals are catalogued as first-class results, not buried |
+| Which claim shapes do I over-trust? | MONOTONIC mechanisms, **~69%** over-trusted | reweighted at the calibration layer |
 
 Every number above was produced by a scheduled job in this repo, against the
 system's own knowledge base, and survives on the live dashboard. The honest
@@ -94,9 +94,10 @@ ticker by `cron/jobs.json`. Nothing is a black box.
 
 **It measures its own epistemic failure modes.** The meta-prober tests whether
 the system can predict which of its own claims transfer to new domains (the
-reference deployment measured itself at 53% — barely better than chance — and
-responded by hair-cutting transfer confidence). Mechanism-level calibration
-found MONOTONIC-type claims were over-trusted at 67.6% and reweighted them.
+reference deployment measured itself at ~58% over ~500 self-probes — barely
+better than chance, 53% on the first N=32 — and responded by hair-cutting
+transfer confidence). Mechanism-level calibration found MONOTONIC-type claims
+were over-trusted (~69%) and reweighted them.
 Contradicted claims are not deleted; they are routed to an attack lane and
 fought over.
 
