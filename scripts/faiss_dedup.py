@@ -11,9 +11,12 @@ Usage:
     index = get_index()  # loads from cache or builds (~30s first time)
     is_dup = check_duplicates_batch(["hypothesis 1", "hypothesis 2"], index)
 """
-
 import json
 from prometheus_paths import HERMES_HOME as _PP_HERMES_HOME
+import os as _os
+_os.environ.setdefault('OMP_THREAD_LIMIT', '1')
+_os.environ.setdefault('OPENBLAS_NUM_THREADS', '1')
+_os.environ.setdefault('MKL_NUM_THREADS', '1')
 import os
 import sqlite3
 import time

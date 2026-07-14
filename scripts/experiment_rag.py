@@ -983,7 +983,6 @@ def query_rag(query: str, top_k: int = 5, doc_type: str = None, worker_id: str =
     # only; documents are embedded without a prefix during indexing.
     _q = f"Instruct: Given a research question, retrieve semantically related prior experiments and findings\nQuery: {query}"
     query_emb = get_embeddings([_q], url)[0]
-
     # Try FAISS first — sub-second search across the full corpus
     faiss_path = RAG_DIR / "faiss_index.faiss"
     meta_path = RAG_DIR / "faiss_index.meta.json"
@@ -997,15 +996,26 @@ def query_rag(query: str, top_k: int = 5, doc_type: str = None, worker_id: str =
                 _sys.path.insert(0, _venv_sp)
             import faiss
             import json as _json
-            index = faiss.read_index(str(faiss_path))
-            with open(meta_path) as f:
-                meta = _json.load(f)
+            # Cache the FAISS index and metadata in memory to avoid re-reading
+            # 479MB+ from disk on every call (fixes refiller timeout).
+            global _faiss_cache
+            if "_faiss_cache" not in globals():
+                _faiss_cache = {}
+            if faiss_path not in _faiss_cache or _faiss_cache[faiss_path].get("mtime") != faiss_path.stat().st_mtime:
+                _faiss_cache[faiss_path] = {
+                    "index": faiss.read_index(str(faiss_path)),
+                    "meta": None,
+                    "mtime": faiss_path.stat().st_mtime,
+                }
+                with open(meta_path) as f:
+                    _faiss_cache[faiss_path]["meta"] = _json.load(f)
+            index = _faiss_cache[faiss_path]["index"]
+            meta = _faiss_cache[faiss_path]["meta"]
             exp_ids = meta.get("exp_ids", [])
 
             # Search (return 2x results for filtering)
             query_vec = query_emb.reshape(1, -1).astype("float32")
             distances, indices = index.search(query_vec, top_k * 2)
-
             # Look up metadata for matches
             results = []
             with get_db() as conn:
