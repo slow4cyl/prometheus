@@ -89,3 +89,29 @@ fork-carried, do NOT delete): #61235 model-override arg order (upstream
 independently rebuilt spawn at the 2026-07-14 base update — resolved as a
 coexisting merge), #61233 reaper bounded retry, #61229 goal max-turns env.
 All others open awaiting review as of this refresh.
+
+## Conflict resolution — 2026-07-15
+
+The 2026-07-14 base update (upstream main +268) left two open PRs CONFLICTING
+against the new main; rebased both in a throwaway clone and force-pushed. All
+14 open PRs now report MERGEABLE.
+
+- **#61228** (`fix/context-overflow-handling`) — the real one. Upstream had
+  independently reworked the output-cap retry into a dual-bound form
+  (`min(provider_available, ctx − local_input_estimate)`), the same collision
+  the base-update changelog called out. Resolved to the operator-validated
+  live-fork shape: **upstream's dual-bound + our non-convergence spiral guard
+  (reset the ephemeral cap and fall through to input compression) + the shared
+  512-token margin as `OUTPUT_CAP_RETRY_SAFETY_MARGIN`**. The production
+  overflow block is now functionally identical to the live fork (only a
+  comment and a line-wrap differ). 149 overflow tests pass
+  (`test_ctx_halving_fix` + `test_413_compression` + `test_chat_completions`).
+- **#62121** (`fix/cron-job-log-null-name-fallback`) — additive test
+  conflict only: upstream added a new one-shot test method at the exact spot
+  the PR added its null-name regression. Kept both. 124 cron tests pass (3
+  croniter-not-installed failures are environmental, identical on clean main).
+
+Method note: the editable install (`~/.hermes/hermes-agent`) shadows any
+scratch checkout via an import hook, so tests must force the scratch tree to
+`sys.path[0]` and purge pre-imported `agent`/`hermes_cli`/`cron` modules
+(a rootdir `conftest.py` does it); PYTHONPATH alone loses to the hook.
