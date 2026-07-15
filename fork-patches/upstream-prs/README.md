@@ -115,3 +115,28 @@ Method note: the editable install (`~/.hermes/hermes-agent`) shadows any
 scratch checkout via an import hook, so tests must force the scratch tree to
 `sys.path[0]` and purge pre-imported `agent`/`hermes_cli`/`cron` modules
 (a rootdir `conftest.py` does it); PYTHONPATH alone loses to the hook.
+
+### CI follow-up (same day): attribution + margin-pin failures, both fixed
+
+The first force-push tripped two check classes; re-pushed with fixes
+(`07b84f1db` / `8965da78a`, rebased onto the day's newer main tip):
+
+- **`Check contributors / check-attribution`** (NEW upstream workflow — only
+  runs on fresh pushes, which is why the 12 untouched PRs don't show it):
+  every commit AUTHOR email must be in `scripts/release.py` `AUTHOR_MAP` or
+  match `\d+\+user@users.noreply.github.com` (auto-resolves). The rebase
+  clone had no git identity set → commits went up authored
+  `their-email@example.com` / `prometheus@localhost`. **Standing rule: set
+  `user.name slow4cyl` + `user.email 22582211+slow4cyl@users.noreply.github.com`
+  in any clone that will push PR branches** (`slow4cyl@gmail.com` is NOT in
+  AUTHOR_MAP either — use the noreply form). Fixed via
+  `git rebase up/main --exec 'git commit --amend --no-edit --reset-author'`.
+- **Python tests slice 3/8 on #61228**: upstream's own
+  `test_output_cap_retry_request_pressure_lower_bound` pins the retry margin;
+  the PR moves it 64→512 via the shared constant. Ported the fork's rebase
+  resolution (`9fc7834b7` — pin the constant, not the literal) into the
+  burst-scope commit. 150 tests green locally incl. the re-pinned one.
+- Slice 7/8 was an unrelated pytest-asyncio tmpdir race in
+  `test_browser_command_timeout_race.py` (files the PR never touches;
+  "1 passed, 5 errors" on `/tmp/pytest-of-runner` teardown) — infra flake,
+  expected to clear on re-run.
